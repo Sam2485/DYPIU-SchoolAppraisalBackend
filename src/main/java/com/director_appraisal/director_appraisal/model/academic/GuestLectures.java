@@ -1,0 +1,45 @@
+package com.director_appraisal.director_appraisal.model.academic;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Entity
+@Table(name = "guest_lectures")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class GuestLectures {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Long submissionId;
+
+    @Column(columnDefinition = "TEXT")
+    private String srNo;
+
+    @Column(columnDefinition = "TEXT")
+    private String nameOfTheResourcePerson;
+
+    @Column(columnDefinition = "TEXT")
+    private String designationAndOrganization;
+
+    @Column(columnDefinition = "TEXT")
+    private String dateOfConduction;
+
+    @Column(columnDefinition = "TEXT")
+    private String topic;
+
+    @Column(columnDefinition = "TEXT")
+    private String numberOfBeneficiaries;
+
+    @Column(columnDefinition = "TEXT")
+    private String linkToRelevantProof;
+
+}
