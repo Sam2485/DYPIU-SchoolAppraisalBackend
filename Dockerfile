@@ -1,18 +1,14 @@
 # =============================================================================
-# Stage 1 — Build the Spring Boot fat jar (using Gradle)
+# Stage 1 — Build the Spring Boot fat jar (using Maven)
 # =============================================================================
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM maven:3.9.8-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 
-COPY gradlew .
-COPY gradle/ gradle/
-RUN chmod +x gradlew
-
-COPY build.gradle settings.gradle ./
-RUN ./gradlew dependencies --no-daemon
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
 COPY src ./src
-RUN ./gradlew bootJar -x test --no-daemon
+RUN mvn package -DskipTests -B
 
 # =============================================================================
 # Stage 2 — Lean JRE runtime image
@@ -27,7 +23,7 @@ WORKDIR /app
 # Pre-create uploads dir for local fallback storage mode
 RUN mkdir -p /app/uploads && chown spring:spring /app/uploads
 
-COPY --from=build /app/build/libs/*.jar app.jar
+COPY --from=build /app/target/*.jar app.jar
 
 USER spring:spring
 

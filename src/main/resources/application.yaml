@@ -1,3 +1,6 @@
+server:
+  port: ${PORT:8080}
+
 spring:
   application:
     name: director-appraisal
@@ -34,11 +37,11 @@ spring:
 # ── JWT & Custom Configs ──────────────────────────────────────────────────────
 app:
   jwt:
-    secret: ${JWT_SECRET:SecretKeyForJWTAppraisalMustBeAtLeast256BitsLongForHMACSHA256}
+    secret: ${JWT_SECRET:${JWT_SECRET_KEY:SecretKeyForJWTAppraisalMustBeAtLeast256BitsLongForHMACSHA256}}
     expiration-ms: 86400000 # 24 hours
   gcp:
     enabled: ${GCP_ENABLED:false}
-    bucket-name: ${GCP_BUCKET_NAME:director-appraisal-attachments}
+    bucket-name: ${GCP_BUCKET_NAME:${GCP_STORAGE_BUCKET:director-appraisal-attachments}}
     project-id: ${GCP_PROJECT_ID:director-appraisal-project}
   upload:
     local-path: ${UPLOAD_LOCAL_PATH:./uploads}
