@@ -1,6 +1,6 @@
 -- Core tables for appraisal application
 
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
                               id BIGSERIAL PRIMARY KEY,
                               email VARCHAR(255) NOT NULL UNIQUE,
                               password VARCHAR(255) NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE public.users (
                               role VARCHAR(100) NOT NULL
 );
 
-CREATE TABLE public.submissions (
+CREATE TABLE IF NOT EXISTS public.submissions (
                                     id BIGSERIAL PRIMARY KEY,
                                     email VARCHAR(255) NOT NULL,
                                     audit_type VARCHAR(100) NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE public.submissions (
                                     version INT NOT NULL DEFAULT 1
 );
 
-CREATE TABLE public.snapshots (
+CREATE TABLE IF NOT EXISTS public.snapshots (
                                   id BIGSERIAL PRIMARY KEY,
                                   submission_id BIGINT NOT NULL,
                                   saved_at TIMESTAMP NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE public.snapshots (
 
 -- Audit table schemas
 
-CREATE TABLE public.student_strength (
+CREATE TABLE IF NOT EXISTS public.student_strength (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          class_name TEXT,
@@ -49,7 +49,7 @@ CREATE TABLE public.student_strength (
                                          CONSTRAINT fk_student_strength_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.faculty_strength (
+CREATE TABLE IF NOT EXISTS public.faculty_strength (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          required_faculty TEXT,
@@ -57,7 +57,7 @@ CREATE TABLE public.faculty_strength (
                                          CONSTRAINT fk_faculty_strength_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.board_of_studies (
+CREATE TABLE IF NOT EXISTS public.board_of_studies (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sr_no TEXT,
@@ -66,7 +66,7 @@ CREATE TABLE public.board_of_studies (
                                          CONSTRAINT fk_board_of_studies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.syllabus_revision (
+CREATE TABLE IF NOT EXISTS public.syllabus_revision (
                                           id BIGSERIAL PRIMARY KEY,
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
@@ -75,7 +75,7 @@ CREATE TABLE public.syllabus_revision (
                                           CONSTRAINT fk_syllabus_revision_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.obe_implementation (
+CREATE TABLE IF NOT EXISTS public.obe_implementation (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
@@ -84,7 +84,7 @@ CREATE TABLE public.obe_implementation (
                                            CONSTRAINT fk_obe_implementation_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.nep_status (
+CREATE TABLE IF NOT EXISTS public.nep_status (
                                    id BIGSERIAL PRIMARY KEY,
                                    submission_id BIGINT NOT NULL,
                                    sn TEXT,
@@ -94,7 +94,7 @@ CREATE TABLE public.nep_status (
                                    CONSTRAINT fk_nep_status_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.best_practices (
+CREATE TABLE IF NOT EXISTS public.best_practices (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sn TEXT,
@@ -104,7 +104,7 @@ CREATE TABLE public.best_practices (
                                        CONSTRAINT fk_best_practices_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.student_mentoring (
+CREATE TABLE IF NOT EXISTS public.student_mentoring (
                                           id BIGSERIAL PRIMARY KEY,
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
@@ -114,7 +114,7 @@ CREATE TABLE public.student_mentoring (
                                           CONSTRAINT fk_student_mentoring_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.graduating_students (
+CREATE TABLE IF NOT EXISTS public.graduating_students (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             program TEXT,
@@ -124,7 +124,7 @@ CREATE TABLE public.graduating_students (
                                             CONSTRAINT fk_graduating_students_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.success_rate (
+CREATE TABLE IF NOT EXISTS public.success_rate (
                                      id BIGSERIAL PRIMARY KEY,
                                      submission_id BIGINT NOT NULL,
                                      program TEXT,
@@ -134,7 +134,7 @@ CREATE TABLE public.success_rate (
                                      CONSTRAINT fk_success_rate_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.qualifying_exams (
+CREATE TABLE IF NOT EXISTS public.qualifying_exams (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sr_no TEXT,
@@ -144,7 +144,7 @@ CREATE TABLE public.qualifying_exams (
                                          CONSTRAINT fk_qualifying_exams_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.student_awards (
+CREATE TABLE IF NOT EXISTS public.student_awards (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
@@ -154,7 +154,7 @@ CREATE TABLE public.student_awards (
                                        CONSTRAINT fk_student_awards_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.student_placements (
+CREATE TABLE IF NOT EXISTS public.student_placements (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            program TEXT,
@@ -165,7 +165,7 @@ CREATE TABLE public.student_placements (
                                            CONSTRAINT fk_student_placements_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.higher_studies (
+CREATE TABLE IF NOT EXISTS public.higher_studies (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        program TEXT,
@@ -175,7 +175,7 @@ CREATE TABLE public.higher_studies (
                                        CONSTRAINT fk_higher_studies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.student_startups (
+CREATE TABLE IF NOT EXISTS public.student_startups (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sn TEXT,
@@ -185,7 +185,7 @@ CREATE TABLE public.student_startups (
                                          CONSTRAINT fk_student_startups_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.student_courses (
+CREATE TABLE IF NOT EXISTS public.student_courses (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
@@ -197,7 +197,7 @@ CREATE TABLE public.student_courses (
                                         CONSTRAINT fk_student_courses_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.alumni_interactions (
+CREATE TABLE IF NOT EXISTS public.alumni_interactions (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -211,7 +211,7 @@ CREATE TABLE public.alumni_interactions (
                                             CONSTRAINT fk_alumni_interactions_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.guest_lectures (
+CREATE TABLE IF NOT EXISTS public.guest_lectures (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
@@ -224,7 +224,7 @@ CREATE TABLE public.guest_lectures (
                                        CONSTRAINT fk_guest_lectures_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.professional_bodies (
+CREATE TABLE IF NOT EXISTS public.professional_bodies (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -236,7 +236,7 @@ CREATE TABLE public.professional_bodies (
                                             CONSTRAINT fk_professional_bodies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.value_added_courses (
+CREATE TABLE IF NOT EXISTS public.value_added_courses (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -248,7 +248,7 @@ CREATE TABLE public.value_added_courses (
                                             CONSTRAINT fk_value_added_courses_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.career_guidance (
+CREATE TABLE IF NOT EXISTS public.career_guidance (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
@@ -260,7 +260,7 @@ CREATE TABLE public.career_guidance (
                                         CONSTRAINT fk_career_guidance_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.extension_activities (
+CREATE TABLE IF NOT EXISTS public.extension_activities (
                                              id BIGSERIAL PRIMARY KEY,
                                              submission_id BIGINT NOT NULL,
                                              sr_no TEXT,
@@ -272,7 +272,7 @@ CREATE TABLE public.extension_activities (
                                              CONSTRAINT fk_extension_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.faculty_specialization (
+CREATE TABLE IF NOT EXISTS public.faculty_specialization (
                                                id BIGSERIAL PRIMARY KEY,
                                                submission_id BIGINT NOT NULL,
                                                sr_no TEXT,
@@ -284,7 +284,7 @@ CREATE TABLE public.faculty_specialization (
                                                CONSTRAINT fk_faculty_specialization_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.research_publications (
+CREATE TABLE IF NOT EXISTS public.research_publications (
                                               id BIGSERIAL PRIMARY KEY,
                                               submission_id BIGINT NOT NULL,
                                               paper_title TEXT,
@@ -299,7 +299,7 @@ CREATE TABLE public.research_publications (
                                               CONSTRAINT fk_research_publications_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.books_chapters (
+CREATE TABLE IF NOT EXISTS public.books_chapters (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        teacher_name TEXT,
@@ -315,7 +315,7 @@ CREATE TABLE public.books_chapters (
                                        CONSTRAINT fk_books_chapters_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.corporate_training (
+CREATE TABLE IF NOT EXISTS public.corporate_training (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
@@ -327,7 +327,7 @@ CREATE TABLE public.corporate_training (
                                            CONSTRAINT fk_corporate_training_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.consultancy (
+CREATE TABLE IF NOT EXISTS public.consultancy (
                                     id BIGSERIAL PRIMARY KEY,
                                     submission_id BIGINT NOT NULL,
                                     faculty_name TEXT,
@@ -338,7 +338,7 @@ CREATE TABLE public.consultancy (
                                     CONSTRAINT fk_consultancy_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.research_funds (
+CREATE TABLE IF NOT EXISTS public.research_funds (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
@@ -352,7 +352,7 @@ CREATE TABLE public.research_funds (
                                        CONSTRAINT fk_research_funds_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.e_contents (
+CREATE TABLE IF NOT EXISTS public.e_contents (
                                    id BIGSERIAL PRIMARY KEY,
                                    submission_id BIGINT NOT NULL,
                                    sr_no TEXT,
@@ -364,7 +364,7 @@ CREATE TABLE public.e_contents (
                                    CONSTRAINT fk_e_contents_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.teacher_awards (
+CREATE TABLE IF NOT EXISTS public.teacher_awards (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        teacher_name TEXT,
@@ -374,7 +374,7 @@ CREATE TABLE public.teacher_awards (
                                        CONSTRAINT fk_teacher_awards_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.patents_copyrights (
+CREATE TABLE IF NOT EXISTS public.patents_copyrights (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
@@ -388,7 +388,7 @@ CREATE TABLE public.patents_copyrights (
                                            CONSTRAINT fk_patents_copyrights_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.fdp_organized (
+CREATE TABLE IF NOT EXISTS public.fdp_organized (
                                       id BIGSERIAL PRIMARY KEY,
                                       submission_id BIGINT NOT NULL,
                                       sl_no TEXT,
@@ -402,7 +402,7 @@ CREATE TABLE public.fdp_organized (
                                       CONSTRAINT fk_fdp_organized_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.fdp_attended (
+CREATE TABLE IF NOT EXISTS public.fdp_attended (
                                      id BIGSERIAL PRIMARY KEY,
                                      submission_id BIGINT NOT NULL,
                                      sl_no TEXT,
@@ -415,7 +415,7 @@ CREATE TABLE public.fdp_attended (
                                      CONSTRAINT fk_fdp_attended_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.functional_mous (
+CREATE TABLE IF NOT EXISTS public.functional_mous (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
@@ -427,7 +427,7 @@ CREATE TABLE public.functional_mous (
                                         CONSTRAINT fk_functional_mous_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.swoc_strength (
+CREATE TABLE IF NOT EXISTS public.swoc_strength (
                                       id BIGSERIAL PRIMARY KEY,
                                       submission_id BIGINT NOT NULL,
                                       sr_no TEXT,
@@ -435,7 +435,7 @@ CREATE TABLE public.swoc_strength (
                                       CONSTRAINT fk_swoc_strength_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.swoc_weaknesses (
+CREATE TABLE IF NOT EXISTS public.swoc_weaknesses (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
@@ -443,7 +443,7 @@ CREATE TABLE public.swoc_weaknesses (
                                         CONSTRAINT fk_swoc_weaknesses_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.swoc_opportunities (
+CREATE TABLE IF NOT EXISTS public.swoc_opportunities (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
@@ -451,7 +451,7 @@ CREATE TABLE public.swoc_opportunities (
                                            CONSTRAINT fk_swoc_opportunities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.swoc_challenges (
+CREATE TABLE IF NOT EXISTS public.swoc_challenges (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
@@ -459,7 +459,7 @@ CREATE TABLE public.swoc_challenges (
                                         CONSTRAINT fk_swoc_challenges_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.swoc_other_information (
+CREATE TABLE IF NOT EXISTS public.swoc_other_information (
                                                id BIGSERIAL PRIMARY KEY,
                                                submission_id BIGINT NOT NULL,
                                                sr_no TEXT,
@@ -467,7 +467,7 @@ CREATE TABLE public.swoc_other_information (
                                                CONSTRAINT fk_swoc_other_information_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.courses_offered (
+CREATE TABLE IF NOT EXISTS public.courses_offered (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
@@ -478,7 +478,7 @@ CREATE TABLE public.courses_offered (
                                         CONSTRAINT fk_courses_offered_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.student_statistics (
+CREATE TABLE IF NOT EXISTS public.student_statistics (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
@@ -490,7 +490,7 @@ CREATE TABLE public.student_statistics (
                                            CONSTRAINT fk_student_statistics_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.statutory_bodies (
+CREATE TABLE IF NOT EXISTS public.statutory_bodies (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sr_no TEXT,
@@ -501,7 +501,7 @@ CREATE TABLE public.statutory_bodies (
                                          CONSTRAINT fk_statutory_bodies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.audit_records (
+CREATE TABLE IF NOT EXISTS public.audit_records (
                                       id BIGSERIAL PRIMARY KEY,
                                       submission_id BIGINT NOT NULL,
                                       sr_no TEXT,
@@ -512,7 +512,7 @@ CREATE TABLE public.audit_records (
                                       CONSTRAINT fk_audit_records_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.scholarship_summary (
+CREATE TABLE IF NOT EXISTS public.scholarship_summary (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -525,7 +525,7 @@ CREATE TABLE public.scholarship_summary (
                                             CONSTRAINT fk_scholarship_summary_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.scholarship_students (
+CREATE TABLE IF NOT EXISTS public.scholarship_students (
                                              id BIGSERIAL PRIMARY KEY,
                                              submission_id BIGINT NOT NULL,
                                              sr_no TEXT,
@@ -537,7 +537,7 @@ CREATE TABLE public.scholarship_students (
                                              CONSTRAINT fk_scholarship_students_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.faculty_information (
+CREATE TABLE IF NOT EXISTS public.faculty_information (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -548,7 +548,7 @@ CREATE TABLE public.faculty_information (
                                             CONSTRAINT fk_faculty_information_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.faculty_tenure (
+CREATE TABLE IF NOT EXISTS public.faculty_tenure (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
@@ -557,7 +557,7 @@ CREATE TABLE public.faculty_tenure (
                                        CONSTRAINT fk_faculty_tenure_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.faculty_experience (
+CREATE TABLE IF NOT EXISTS public.faculty_experience (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            s_no TEXT,
@@ -571,7 +571,7 @@ CREATE TABLE public.faculty_experience (
                                            CONSTRAINT fk_faculty_experience_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.supporting_staff (
+CREATE TABLE IF NOT EXISTS public.supporting_staff (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          s_no TEXT,
@@ -585,7 +585,7 @@ CREATE TABLE public.supporting_staff (
                                          CONSTRAINT fk_supporting_staff_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.staff_training (
+CREATE TABLE IF NOT EXISTS public.staff_training (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
@@ -596,7 +596,7 @@ CREATE TABLE public.staff_training (
                                        CONSTRAINT fk_staff_training_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.building_infrastructure (
+CREATE TABLE IF NOT EXISTS public.building_infrastructure (
                                                 id BIGSERIAL PRIMARY KEY,
                                                 submission_id BIGINT NOT NULL,
                                                 sr_no TEXT,
@@ -605,7 +605,7 @@ CREATE TABLE public.building_infrastructure (
                                                 CONSTRAINT fk_building_infrastructure_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.library_infrastructure (
+CREATE TABLE IF NOT EXISTS public.library_infrastructure (
                                                id BIGSERIAL PRIMARY KEY,
                                                submission_id BIGINT NOT NULL,
                                                sr_no TEXT,
@@ -614,7 +614,7 @@ CREATE TABLE public.library_infrastructure (
                                                CONSTRAINT fk_library_infrastructure_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.e_resources (
+CREATE TABLE IF NOT EXISTS public.e_resources (
                                     id BIGSERIAL PRIMARY KEY,
                                     submission_id BIGINT NOT NULL,
                                     sr_no TEXT,
@@ -624,7 +624,7 @@ CREATE TABLE public.e_resources (
                                     CONSTRAINT fk_e_resources_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.it_infrastructure (
+CREATE TABLE IF NOT EXISTS public.it_infrastructure (
                                           id BIGSERIAL PRIMARY KEY,
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
@@ -633,7 +633,7 @@ CREATE TABLE public.it_infrastructure (
                                           CONSTRAINT fk_it_infrastructure_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.sports_facilities (
+CREATE TABLE IF NOT EXISTS public.sports_facilities (
                                           id BIGSERIAL PRIMARY KEY,
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
@@ -642,7 +642,7 @@ CREATE TABLE public.sports_facilities (
                                           CONSTRAINT fk_sports_facilities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.divyangajan_facilities (
+CREATE TABLE IF NOT EXISTS public.divyangajan_facilities (
                                                id BIGSERIAL PRIMARY KEY,
                                                submission_id BIGINT NOT NULL,
                                                sr_no TEXT,
@@ -651,7 +651,7 @@ CREATE TABLE public.divyangajan_facilities (
                                                CONSTRAINT fk_divyangajan_facilities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.research_resources (
+CREATE TABLE IF NOT EXISTS public.research_resources (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
@@ -661,7 +661,7 @@ CREATE TABLE public.research_resources (
                                            CONSTRAINT fk_research_resources_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.hackathons (
+CREATE TABLE IF NOT EXISTS public.hackathons (
                                    id BIGSERIAL PRIMARY KEY,
                                    submission_id BIGINT NOT NULL,
                                    sr_no TEXT,
@@ -672,7 +672,7 @@ CREATE TABLE public.hackathons (
                                    CONSTRAINT fk_hackathons_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.cultural_activities (
+CREATE TABLE IF NOT EXISTS public.cultural_activities (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -683,7 +683,7 @@ CREATE TABLE public.cultural_activities (
                                             CONSTRAINT fk_cultural_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.sports_activities (
+CREATE TABLE IF NOT EXISTS public.sports_activities (
                                           id BIGSERIAL PRIMARY KEY,
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
@@ -694,7 +694,7 @@ CREATE TABLE public.sports_activities (
                                           CONSTRAINT fk_sports_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.community_activities (
+CREATE TABLE IF NOT EXISTS public.community_activities (
                                              id BIGSERIAL PRIMARY KEY,
                                              submission_id BIGINT NOT NULL,
                                              sr_no TEXT,
@@ -705,7 +705,7 @@ CREATE TABLE public.community_activities (
                                              CONSTRAINT fk_community_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.admin_student_awards (
+CREATE TABLE IF NOT EXISTS public.admin_student_awards (
                                              id BIGSERIAL PRIMARY KEY,
                                              submission_id BIGINT NOT NULL,
                                              sr_no TEXT,
@@ -717,7 +717,7 @@ CREATE TABLE public.admin_student_awards (
                                              CONSTRAINT fk_admin_student_awards_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.training_activities (
+CREATE TABLE IF NOT EXISTS public.training_activities (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
@@ -728,7 +728,7 @@ CREATE TABLE public.training_activities (
                                             CONSTRAINT fk_training_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.industry_collaborations (
+CREATE TABLE IF NOT EXISTS public.industry_collaborations (
                                                 id BIGSERIAL PRIMARY KEY,
                                                 submission_id BIGINT NOT NULL,
                                                 sr_no TEXT,
@@ -739,7 +739,7 @@ CREATE TABLE public.industry_collaborations (
                                                 CONSTRAINT fk_industry_collaborations_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE public.password_reset_tokens (
+CREATE TABLE IF NOT EXISTS public.password_reset_tokens (
                                               id BIGSERIAL PRIMARY KEY,
                                               email VARCHAR(255) NOT NULL,
                                               token_hash VARCHAR(255) NOT NULL UNIQUE,
