@@ -33,7 +33,7 @@ public class EContents {
     @Column(columnDefinition = "TEXT")
     private String platformOnWhichModuleIsDeveloped;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "date_of_launching_e_content", columnDefinition = "TEXT")
     private String dateOfLaunchingEContent;
 
     @Column(columnDefinition = "TEXT")
