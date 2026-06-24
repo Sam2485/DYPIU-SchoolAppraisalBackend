@@ -73,3 +73,14 @@ To allow seamless connection with frontends (e.g., Vite/React developer servers 
 - Allowed Headers: `Authorization`, `Content-Type`, `Cache-Control`.
 - Exposed Headers: `Authorization` (allowing the client to read token headers).
 - Allow Credentials: `true`.
+
+---
+
+## 5. Password Reset Security
+To protect user accounts from token harvesting (if the database is compromised), the system secures reset tokens using a one-way hashing design:
+1. **Token Generation:** The system generates a cryptographically secure random UUID token (`rawToken`) when a user requests a password reset.
+2. **One-Way Hashing:** The system hashes the `rawToken` using `SHA-256` before writing the hash value to the `password_reset_tokens` table.
+3. **Verification:** When the user clicks the reset link in their email and submits a new password, the system hashes the token parameter received from the client and queries the database using the hash. 
+This prevents database-read access from compromising active tokens since the raw tokens are never written to disk.
+4. **Token Clean-up:** The system automatically purges expired or old reset tokens associated with the target email whenever a new reset request is made.
+

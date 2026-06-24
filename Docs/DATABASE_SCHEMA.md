@@ -49,6 +49,15 @@ Saves history snapshots of form entries every time the user saves drafts or subm
 - `attachments` (TEXT): JSON attachments list state.
 - `version` (INT, NOT NULL): Snapshot version number.
 
+### password_reset_tokens
+Holds tokens generated for password resets.
+- `id` (BIGINT, PRIMARY KEY, SERIAL): Unique identifier.
+- `email` (VARCHAR(255), NOT NULL): Target email of the user.
+- `token_hash` (VARCHAR(255), UNIQUE, NOT NULL): SHA-256 hashed reset token.
+- `used` (BOOLEAN, DEFAULT FALSE, NOT NULL): Status of token consumption.
+- `expires_at` (TIMESTAMP, NOT NULL): Date-time when token expires.
+- `created_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP): Creation date-time.
+
 ---
 
 ## 2. Dynamic Child Audit Tables (64 Tables)
@@ -129,4 +138,4 @@ Each of these tables maps to:
 
 ## 3. Database Migrations
 Migrations are baseline managed inside the directory `src/main/resources/db/migration`:
-- **V1__init_schema.sql**: Declares DDL for core tables and all 64 child audit tables with clean cascade constraints.
+- **V1__init_schema.sql**: Declares DDL for core tables (including `users`, `submissions`, `snapshots`, and `password_reset_tokens`) and all 64 child audit tables with clean cascade constraints.

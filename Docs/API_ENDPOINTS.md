@@ -30,6 +30,40 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
   }
   ```
 
+### Forgot Password (Request Reset Link)
+- **URL**: `/forgot-password`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "email": "director@dypiu.ac.in"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "message": "If that email is registered, a reset link has been generated.",
+    "token": "d748f2a1b18c474eb44747a00f2ad37e" // Hashed token details are sent to the registered email address
+  }
+  ```
+
+### Reset Password (Submit New Password)
+- **URL**: `/reset-password`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "token": "d748f2a1b18c474eb44747a00f2ad37e",
+    "newPassword": "newSecretPassword123"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "message": "Password has been reset successfully."
+  }
+  ```
+
 ---
 
 ## 2. Appraisal Submissions Module
@@ -62,7 +96,7 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
 
 ### Save Form Draft
 - **URL**: `/save-draft`
-- **Method**: `POST`
+- **Method**: `POST` | `PUT`
 - **Request Body**:
   ```json
   {
@@ -76,7 +110,7 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
 
 ### Submit Form
 - **URL**: `/submit`
-- **Method**: `POST`
+- **Method**: `POST` | `PUT`
 - **Request Body**: Same as Save Draft.
 - **Response (200 OK)**: Updated submission object with status `SUBMITTED`.
 
@@ -86,10 +120,11 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
 - **Authorization**: Authorized for `ROLE_VICE-CHANCELLOR` and `ROLE_IQAC` roles.
 - **Response (200 OK)**: List of all submitted/reviewed forms.
 
-### Get Submission by ID
+### Get / Update Submission by ID
 - **URL**: `/{id}`
-- **Method**: `GET`
-- **Response (200 OK)**: Submission details if owner or reviewer.
+- **Method**: `GET` | `PUT`
+- **Request Body (For PUT)**: Same as Save Draft.
+- **Response (200 OK)**: Submission details or updated submission object if owner (or reviewer for GET).
 
 ### Review Submission (Reviewers only)
 - **URL**: `/{id}/review`

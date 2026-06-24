@@ -11,6 +11,11 @@ Manages user lifecycle and authorization details.
 - `loadUserByUsername`: Dynamically loads a user from the database by email (integrates with Spring Security).
 - `createUser`: Hashes password credentials securely via `BCrypt` and writes profiles.
 - `checkPassword`: Matches raw login inputs against database-encrypted keys.
+- `createPasswordResetToken`: Cleans up existing tokens for the email, generates a random UUID token, hashes it using SHA-256 and writes to DB, and sends the password reset link to the user's email using `EmailService`.
+- `resetPassword`: Validates the reset token hash, verifies token expiration, updates the user's password using BCrypt encoding, and marks the token as used.
+
+### EmailService
+Wraps JavaMailSender to send transactional text emails. Used by `UserService` to dispatch password reset links.
 
 ### SubmissionService
 Implements form flow logic, draft overrides, and historical snapshot records:
