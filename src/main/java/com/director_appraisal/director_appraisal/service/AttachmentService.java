@@ -26,12 +26,13 @@ public class AttachmentService {
     public AttachmentService(
             @Value("${app.gcp.bucket-name}") String bucketName,
             @Value("${app.upload.local-path}") String localUploadPath,
-            @Value("${app.gcp.enabled:false}") boolean gcpEnabled) {
+            @Value("${app.gcp.enabled:false}") boolean gcpEnabled,
+            @Value("${USE_LOCAL_STORAGE:true}") boolean useLocalStorage) {
         this.bucketName = bucketName;
         this.localUploadPath = localUploadPath;
-        this.useGcp = gcpEnabled;
+        this.useGcp = gcpEnabled || !useLocalStorage;
 
-        if (gcpEnabled) {
+        if (this.useGcp) {
             try {
                 // Initialize GCP Cloud Storage client
                 this.storage = StorageOptions.getDefaultInstance().getService();

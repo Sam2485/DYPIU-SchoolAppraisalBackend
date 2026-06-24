@@ -29,17 +29,17 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-    baseline-version: 1
+    baseline-version: ${SPRING_FLYWAY_BASELINE_VERSION:1}
     locations: classpath:db/migration
     validate-on-migrate: true
     out-of-order: false
 
   # ── Mail Configuration ────────────────────────────────────────────────────────
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${EMAIL_USERNAME:your-email@gmail.com}
-    password: ${EMAIL_PASSWORD:your-app-password}
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:${EMAIL_USERNAME:your-email@gmail.com}}
+    password: ${SMTP_PASSWORD:${EMAIL_PASSWORD:your-app-password}}
     properties:
       mail:
         smtp:
@@ -58,5 +58,7 @@ app:
     bucket-name: ${GCP_BUCKET_NAME:${GCP_STORAGE_BUCKET:director-appraisal-attachments}}
     project-id: ${GCP_PROJECT_ID:director-appraisal-project}
   upload:
-    local-path: ${UPLOAD_LOCAL_PATH:./uploads}
+    local-path: ${LOCAL_STORAGE_DIR:${UPLOAD_LOCAL_PATH:./uploads}}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    from: ${MAIL_FROM:${spring.mail.username:your-email@gmail.com}}
