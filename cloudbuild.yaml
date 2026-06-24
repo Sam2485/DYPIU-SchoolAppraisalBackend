@@ -7,7 +7,7 @@ steps:
       - -c
       - docker pull $_IMAGE:latest || true
 
-  # Build the Spring Boot image (Gradle runs inside the multi-stage Dockerfile)
+  # Build the Spring Boot image (Maven runs inside the multi-stage Dockerfile)
   - name: gcr.io/cloud-builders/docker
     id: build
     waitFor: [pull-cache]
@@ -43,9 +43,9 @@ steps:
       - --port=8080
       - --add-cloudsql-instances=$_SQL_INSTANCE
       # Environment variables
-      - --update-env-vars=DATABASE_URL=jdbc:postgresql:///director_appraisal?cloudSqlInstance=$_SQL_INSTANCE&socketFactory=com.google.cloud.sql.postgres.SocketFactory,DB_USERNAME=postgres,GCP_BUCKET_NAME=$_BUCKET_NAME,GCP_PROJECT_ID=$PROJECT_ID
+      - --update-env-vars=DATABASE_URL=jdbc:postgresql:///director_appraisal?cloudSqlInstance=$_SQL_INSTANCE&socketFactory=com.google.cloud.sql.postgres.SocketFactory,DB_USERNAME=postgres,GCP_BUCKET_NAME=$_BUCKET_NAME,GCP_PROJECT_ID=$PROJECT_ID,GCP_ENABLED=true,EMAIL_USERNAME=$_EMAIL_USERNAME,FRONTEND_URL=$_FRONTEND_URL
       # Secrets pulled from Secret Manager
-      - --update-secrets=DB_PASSWORD=DB_PASSWORD:latest,JWT_SECRET=JWT_SECRET:latest
+      - --update-secrets=DB_PASSWORD=DB_PASSWORD:latest,JWT_SECRET=JWT_SECRET:latest,EMAIL_PASSWORD=EMAIL_PASSWORD:latest
       - --quiet
 
   # Push :COMMIT_SHA in parallel with deploy for traceability
@@ -59,6 +59,8 @@ substitutions:
   _IMAGE: asia-south1-docker.pkg.dev/director-appraisal/director-appraisal-repo/backend
   _SQL_INSTANCE: director-appraisal-project:asia-south1:director-appraisal-db
   _BUCKET_NAME: director-appraisal-attachments
+  _EMAIL_USERNAME: your-email@gmail.com
+  _FRONTEND_URL: http://localhost:5173
 
 images:
   - $_IMAGE:latest

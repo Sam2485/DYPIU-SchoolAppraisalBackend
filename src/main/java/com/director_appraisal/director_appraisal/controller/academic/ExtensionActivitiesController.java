@@ -25,6 +25,11 @@ public class ExtensionActivitiesController {
         return ResponseEntity.ok(service.saveAll(submissionId, rows));
     }
 
+    @PutMapping("/submission/{submissionId}")
+    public ResponseEntity<List<ExtensionActivities>> update(@PathVariable Long submissionId, @RequestBody List<ExtensionActivities> rows) {
+        return ResponseEntity.ok(service.saveAll(submissionId, rows));
+    }
+
     @DeleteMapping("/submission/{submissionId}")
     public ResponseEntity<Void> delete(@PathVariable Long submissionId) {
         service.deleteBySubmissionId(submissionId);

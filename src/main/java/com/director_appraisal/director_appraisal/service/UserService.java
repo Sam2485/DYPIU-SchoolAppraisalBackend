@@ -4,6 +4,7 @@ import com.director_appraisal.director_appraisal.model.PasswordResetToken;
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.PasswordResetTokenRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -23,13 +24,19 @@ public class UserService implements UserDetailsService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository resetTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
+    private final String frontendUrl;
 
     public UserService(UserRepository userRepository, 
                        PasswordResetTokenRepository resetTokenRepository,
-                       @Lazy PasswordEncoder passwordEncoder) {
+                       @Lazy PasswordEncoder passwordEncoder,
+                       EmailService emailService,
+                       @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
+        this.frontendUrl = frontendUrl;
     }
 
     @Override
@@ -77,12 +84,28 @@ public class UserService implements UserDetailsService {
 
         resetTokenRepository.save(resetToken);
 
-        // Log the reset token for console access during testing
-        System.out.println("=================================================");
-        System.out.println("PASSWORD RESET REQUEST INITIATED");
-        System.out.println("Email: " + trimmedEmail);
-        System.out.println("Raw Token: " + rawToken);
-        System.out.println("=================================================");
+        // Send Email
+        String resetLink = frontendUrl + "/reset-password?token=" + rawToken;
+        String emailText = "Dear User,\n\n"
+                + "You requested a password reset for your Faculty Appraisal Account.\n"
+                + "Please click the link below to reset your password. This link is valid for 1 hour:\n\n"
+                + resetLink + "\n\n"
+                + "If you did not request this, please ignore this email.\n\n"
+                + "Regards,\n"
+                + "Faculty Appraisal Team";
+
+        try {
+            emailService.sendEmail(trimmedEmail, "Password Reset Request", emailText);
+            System.out.println("Password reset email successfully sent to: " + trimmedEmail);
+        } catch (Exception e) {
+            System.err.println("Failed to send password reset email to: " + trimmedEmail + ". Error: " + e.getMessage());
+            // We still log the token in console for development/test purposes
+            System.out.println("=================================================");
+            System.out.println("PASSWORD RESET REQUEST INITIATED (EMAIL FAILED)");
+            System.out.println("Email: " + trimmedEmail);
+            System.out.println("Raw Token: " + rawToken);
+            System.out.println("=================================================");
+        }
 
         return rawToken;
     }

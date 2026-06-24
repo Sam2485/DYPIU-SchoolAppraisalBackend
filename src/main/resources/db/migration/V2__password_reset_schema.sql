@@ -1,8 +1,0 @@
-CREATE TABLE public.password_reset_tokens (
-    id BIGSERIAL PRIMARY KEY,
-    email VARCHAR(255) NOT NULL,
-    token_hash VARCHAR(255) NOT NULL UNIQUE,
-    used BOOLEAN NOT NULL DEFAULT FALSE,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);

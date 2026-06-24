@@ -25,6 +25,11 @@ public class SwocChallengesController {
         return ResponseEntity.ok(service.saveAll(submissionId, rows));
     }
 
+    @PutMapping("/submission/{submissionId}")
+    public ResponseEntity<List<SwocChallenges>> update(@PathVariable Long submissionId, @RequestBody List<SwocChallenges> rows) {
+        return ResponseEntity.ok(service.saveAll(submissionId, rows));
+    }
+
     @DeleteMapping("/submission/{submissionId}")
     public ResponseEntity<Void> delete(@PathVariable Long submissionId) {
         service.deleteBySubmissionId(submissionId);

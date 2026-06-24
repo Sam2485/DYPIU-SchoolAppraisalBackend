@@ -25,6 +25,11 @@ public class StudentStatisticsController {
         return ResponseEntity.ok(service.saveAll(submissionId, rows));
     }
 
+    @PutMapping("/submission/{submissionId}")
+    public ResponseEntity<List<StudentStatistics>> update(@PathVariable Long submissionId, @RequestBody List<StudentStatistics> rows) {
+        return ResponseEntity.ok(service.saveAll(submissionId, rows));
+    }
+
     @DeleteMapping("/submission/{submissionId}")
     public ResponseEntity<Void> delete(@PathVariable Long submissionId) {
         service.deleteBySubmissionId(submissionId);

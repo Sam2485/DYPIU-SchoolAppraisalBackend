@@ -81,6 +81,32 @@ public class SubmissionService {
         return saved;
     }
 
+    @Transactional
+    public Submission updateSubmissionById(Long id, String email, String school, String submittedBy, 
+                                         String valuesData, String tablesData, String attachments) {
+        Submission submission = submissionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
+
+        if (!submission.getEmail().equalsIgnoreCase(email)) {
+            throw new IllegalStateException("You are not authorized to edit this submission");
+        }
+
+        if ("APPROVED".equalsIgnoreCase(submission.getStatus())) {
+            throw new IllegalStateException("Cannot edit an approved submission");
+        }
+
+        submission.setSchool(school);
+        submission.setSubmittedBy(submittedBy);
+        submission.setValuesData(valuesData);
+        submission.setTablesData(tablesData);
+        submission.setAttachments(attachments);
+        submission.setVersion(submission.getVersion() + 1);
+
+        Submission saved = submissionRepository.save(submission);
+        createSnapshot(saved);
+        return saved;
+    }
+
     public List<Submission> getSubmissionsForReviewer() {
         // VC & IQAC only view submitted, under-review, approved, and sent-back forms
         return submissionRepository.findByStatusIn(List.of("SUBMITTED", "UNDER_REVIEW", "APPROVED", "SENT_BACK"));

@@ -34,6 +34,20 @@ spring:
     validate-on-migrate: true
     out-of-order: false
 
+  # ── Mail Configuration ────────────────────────────────────────────────────────
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${EMAIL_USERNAME:your-email@gmail.com}
+    password: ${EMAIL_PASSWORD:your-app-password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
 # ── JWT & Custom Configs ──────────────────────────────────────────────────────
 app:
   jwt:
@@ -45,3 +59,4 @@ app:
     project-id: ${GCP_PROJECT_ID:director-appraisal-project}
   upload:
     local-path: ${UPLOAD_LOCAL_PATH:./uploads}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

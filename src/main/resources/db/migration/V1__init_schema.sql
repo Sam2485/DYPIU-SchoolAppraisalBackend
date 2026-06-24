@@ -739,3 +739,11 @@ CREATE TABLE public.industry_collaborations (
     CONSTRAINT fk_industry_collaborations_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
+CREATE TABLE public.password_reset_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL UNIQUE,
+    used BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -92,6 +92,33 @@ public class SubmissionController {
         return ResponseEntity.ok(submitted);
     }
 
+    @PutMapping("/save-draft")
+    public ResponseEntity<Submission> updateDraft(@RequestBody FormSubmissionRequest request) {
+        return saveDraft(request);
+    }
+
+    @PutMapping("/submit")
+    public ResponseEntity<Submission> updateAndSubmitForm(@RequestBody FormSubmissionRequest request) {
+        return submitForm(request);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Submission> updateSubmission(@PathVariable Long id, @RequestBody FormSubmissionRequest request) {
+        String email = getCurrentUserEmail();
+        User user = getCurrentUserDetails();
+        validateAuditTypeForRole(user.getRole(), request.getAuditType());
+        Submission updated = submissionService.updateSubmissionById(
+                id,
+                email,
+                user.getSchool(),
+                user.getName(),
+                request.getValuesData(),
+                request.getTablesData(),
+                request.getAttachments()
+        );
+        return ResponseEntity.ok(updated);
+    }
+
     @GetMapping("/all")
     @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")
     public ResponseEntity<List<Submission>> getAllSubmissions() {
