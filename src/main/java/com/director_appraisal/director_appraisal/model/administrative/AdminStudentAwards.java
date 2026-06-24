@@ -24,19 +24,19 @@ public class AdminStudentAwards {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "award_name", columnDefinition = "TEXT")
     private String nameOfTheAward;
 
     @Column(columnDefinition = "TEXT")
     private String teamIndividual;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "level_type", columnDefinition = "TEXT")
     private String interUniversityStateNationalInternational;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "event_name", columnDefinition = "TEXT")
     private String nameOfTheEvent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "student_name", columnDefinition = "TEXT")
     private String nameOfTheStudent;
 
 }

@@ -24,25 +24,25 @@ public class FdpOrganized {
     @Column(columnDefinition = "TEXT")
     private String slNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "coordinator", columnDefinition = "TEXT")
     private String nameOfConvenerCoordinator;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "seminar_title", columnDefinition = "TEXT")
     private String titleOfSeminarCourse;
 
     @Column(columnDefinition = "TEXT")
     private String sponsoringAgency;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "duration_dates", columnDefinition = "TEXT")
     private String durationWithDates;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "participants_count", columnDefinition = "TEXT")
     private String noOfInternalAndExternalParticipants;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "published", columnDefinition = "TEXT")
     private String proceedingsPublishedYesNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

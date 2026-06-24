@@ -24,7 +24,7 @@ public class BoardOfStudies {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "meeting_date", columnDefinition = "TEXT")
     private String dateOfTheMeeting;
 
     @Column(columnDefinition = "TEXT")

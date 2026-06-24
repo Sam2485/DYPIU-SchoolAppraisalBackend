@@ -24,10 +24,10 @@ public class CorporateTraining {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "faculty_name", columnDefinition = "TEXT")
     private String nameOfFaculty;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "training_agency", columnDefinition = "TEXT")
     private String agencySeekingTraining;
 
     @Column(columnDefinition = "TEXT")
@@ -36,7 +36,7 @@ public class CorporateTraining {
     @Column(columnDefinition = "TEXT")
     private String numberOfTrainees;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

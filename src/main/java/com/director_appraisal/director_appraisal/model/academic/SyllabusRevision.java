@@ -27,7 +27,7 @@ public class SyllabusRevision {
     @Column(columnDefinition = "TEXT")
     private String categoryOfFeedback;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_analysis_atr", columnDefinition = "TEXT")
     private String linkForAnalysisAndAtr;
 
 }

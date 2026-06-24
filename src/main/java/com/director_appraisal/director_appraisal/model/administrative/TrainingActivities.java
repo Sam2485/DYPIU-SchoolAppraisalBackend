@@ -27,13 +27,13 @@ public class TrainingActivities {
     @Column(columnDefinition = "TEXT")
     private String academicYear;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "event_name", columnDefinition = "TEXT")
     private String titleOfTheEvent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "conduction_date", columnDefinition = "TEXT")
     private String dateOfConduction;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_benefited", columnDefinition = "TEXT")
     private String noOfStudentsBenefited;
 
 }

@@ -24,19 +24,19 @@ public class ValueAddedCourses {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "course_title", columnDefinition = "TEXT")
     private String titleOfTheCourse;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "resource_person", columnDefinition = "TEXT")
     private String detailsOfResourcePerson;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "duration_date", columnDefinition = "TEXT")
     private String durationAndDateOfConduction;
 
     @Column(columnDefinition = "TEXT")
     private String noOfBeneficiaries;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

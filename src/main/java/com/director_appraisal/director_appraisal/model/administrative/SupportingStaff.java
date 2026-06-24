@@ -24,22 +24,22 @@ public class SupportingStaff {
     @Column(columnDefinition = "TEXT")
     private String sNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "staff_name", columnDefinition = "TEXT")
     private String nameOfTheSupportingStaff;
 
     @Column(columnDefinition = "TEXT")
     private String designation;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "qualification", columnDefinition = "TEXT")
     private String highestQualification;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "joining_date", columnDefinition = "TEXT")
     private String dateOfJoiningInDypiu;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "experience_dypiu", columnDefinition = "TEXT")
     private String experienceInDypiu;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "prior_experience", columnDefinition = "TEXT")
     private String experienceBeforeJoiningDypiu;
 
     @Column(columnDefinition = "TEXT")

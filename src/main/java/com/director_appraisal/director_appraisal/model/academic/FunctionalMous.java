@@ -24,19 +24,19 @@ public class FunctionalMous {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "partner_org", columnDefinition = "TEXT")
     private String nameOfTheOrganizationInstitutionIndustry;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "signing_year", columnDefinition = "TEXT")
     private String yearOfSigningMou;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "mou_duration", columnDefinition = "TEXT")
     private String durationOfMou;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "activities", columnDefinition = "TEXT")
     private String listTheActualActivitiesUnderEachMou;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

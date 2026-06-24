@@ -27,10 +27,10 @@ public class ScholarshipSummary {
     @Column(columnDefinition = "TEXT")
     private String year;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "scholarship_title", columnDefinition = "TEXT")
     private String titleOfScholarship;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_count", columnDefinition = "TEXT")
     private String numberOfTheStudents;
 
     @Column(columnDefinition = "TEXT")
@@ -39,7 +39,7 @@ public class ScholarshipSummary {
     @Column(columnDefinition = "TEXT")
     private String awardingAgency;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "awarding_org", columnDefinition = "TEXT")
     private String awardingOrganization;
 
 }

@@ -36,7 +36,7 @@ public class FacultySpecialization {
     @Column(columnDefinition = "TEXT")
     private String specialization;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "phd_supervised", columnDefinition = "TEXT")
     private String noOfPhdSupervised;
 
 }

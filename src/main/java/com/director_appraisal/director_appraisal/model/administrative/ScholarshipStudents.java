@@ -27,10 +27,10 @@ public class ScholarshipStudents {
     @Column(columnDefinition = "TEXT")
     private String year;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "scholarship_title", columnDefinition = "TEXT")
     private String titleOfScholarship;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "student_name", columnDefinition = "TEXT")
     private String nameOfTheStudents;
 
     @Column(columnDefinition = "TEXT")

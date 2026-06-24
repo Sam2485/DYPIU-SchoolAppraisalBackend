@@ -24,7 +24,7 @@ public class AlumniInteractions {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "alumni_name", columnDefinition = "TEXT")
     private String nameOfAlumni;
 
     @Column(columnDefinition = "TEXT")
@@ -33,7 +33,7 @@ public class AlumniInteractions {
     @Column(columnDefinition = "TEXT")
     private String presentEmployer;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "interaction_date", columnDefinition = "TEXT")
     private String dateOnInteraction;
 
     @Column(columnDefinition = "TEXT")
@@ -42,7 +42,7 @@ public class AlumniInteractions {
     @Column(columnDefinition = "TEXT")
     private String noOfBeneficiaries;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

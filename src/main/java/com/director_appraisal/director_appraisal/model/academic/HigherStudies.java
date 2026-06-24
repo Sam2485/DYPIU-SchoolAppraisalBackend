@@ -24,10 +24,10 @@ public class HigherStudies {
     @Column(columnDefinition = "TEXT")
     private String program;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_appeared", columnDefinition = "TEXT")
     private String noOfStudentsAppearedForFinalYearExam;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "selected_students", columnDefinition = "TEXT")
     private String noOfStudentsSelectedForHigherStudies;
 
     @Column(columnDefinition = "TEXT")

@@ -36,7 +36,7 @@ public class StudentCourses {
     @Column(columnDefinition = "TEXT")
     private String duration;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

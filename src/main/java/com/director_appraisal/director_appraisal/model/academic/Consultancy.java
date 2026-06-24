@@ -21,19 +21,19 @@ public class Consultancy {
     @Column(nullable = false)
     private Long submissionId;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "faculty_name", columnDefinition = "TEXT")
     private String nameOfTheFaculty;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "project_title", columnDefinition = "TEXT")
     private String titleOfTheConsultancyProject;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "sponsoring_agency", columnDefinition = "TEXT")
     private String consultingSponsoringAgency;
 
     @Column(columnDefinition = "TEXT")
     private String revenueGenerated;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

@@ -24,7 +24,7 @@ public class StudentMentoring {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "mentor_name", columnDefinition = "TEXT")
     private String nameOfMentor;
 
     @Column(columnDefinition = "TEXT")

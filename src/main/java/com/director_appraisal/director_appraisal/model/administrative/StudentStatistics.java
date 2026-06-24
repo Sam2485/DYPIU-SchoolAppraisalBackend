@@ -36,7 +36,7 @@ public class StudentStatistics {
     @Column(columnDefinition = "TEXT")
     private String phd;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "skill_courses", columnDefinition = "TEXT")
     private String valueAddedSkillCourses;
 
 }

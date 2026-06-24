@@ -24,22 +24,22 @@ public class GuestLectures {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "resource_person", columnDefinition = "TEXT")
     private String nameOfTheResourcePerson;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "designation_org", columnDefinition = "TEXT")
     private String designationAndOrganization;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "conduction_date", columnDefinition = "TEXT")
     private String dateOfConduction;
 
     @Column(columnDefinition = "TEXT")
     private String topic;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "no_beneficiaries", columnDefinition = "TEXT")
     private String numberOfBeneficiaries;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

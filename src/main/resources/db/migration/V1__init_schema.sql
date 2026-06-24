@@ -61,7 +61,7 @@ CREATE TABLE public.board_of_studies (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sr_no TEXT,
-                                         date_of_the_meeting TEXT,
+                                         meeting_date TEXT,
                                          link_for_mom TEXT,
                                          CONSTRAINT fk_board_of_studies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
@@ -71,7 +71,7 @@ CREATE TABLE public.syllabus_revision (
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
                                           category_of_feedback TEXT,
-                                          link_for_analysis_and_atr TEXT,
+                                          link_analysis_atr TEXT,
                                           CONSTRAINT fk_syllabus_revision_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -80,7 +80,7 @@ CREATE TABLE public.obe_implementation (
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
                                            particular TEXT,
-                                           link_for_the_document TEXT,
+                                           link_document TEXT,
                                            CONSTRAINT fk_obe_implementation_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -90,7 +90,7 @@ CREATE TABLE public.nep_status (
                                    sn TEXT,
                                    check_points TEXT,
                                    availability TEXT,
-                                   link_for_the_document TEXT,
+                                   link_document TEXT,
                                    CONSTRAINT fk_nep_status_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -100,7 +100,7 @@ CREATE TABLE public.best_practices (
                                        sn TEXT,
                                        check_points TEXT,
                                        availability TEXT,
-                                       link_for_the_document TEXT,
+                                       link_document TEXT,
                                        CONSTRAINT fk_best_practices_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -108,7 +108,7 @@ CREATE TABLE public.student_mentoring (
                                           id BIGSERIAL PRIMARY KEY,
                                           submission_id BIGINT NOT NULL,
                                           sr_no TEXT,
-                                          name_of_mentor TEXT,
+                                          mentor_name TEXT,
                                           no_of_mentees TEXT,
                                           link_to_document TEXT,
                                           CONSTRAINT fk_student_mentoring_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
@@ -128,8 +128,8 @@ CREATE TABLE public.success_rate (
                                      id BIGSERIAL PRIMARY KEY,
                                      submission_id BIGINT NOT NULL,
                                      program TEXT,
-                                     no_of_students_appeared_for_final_semester_exam TEXT,
-                                     number_of_students_cleared_program_in_stipulated_duration TEXT,
+                                     students_appeared TEXT,
+                                     students_cleared TEXT,
                                      success_rate_percent TEXT,
                                      CONSTRAINT fk_success_rate_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
@@ -138,9 +138,9 @@ CREATE TABLE public.qualifying_exams (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sr_no TEXT,
-                                         name_of_the_student TEXT,
+                                         student_name TEXT,
                                          examination_details TEXT,
-                                         proof_as_attachment TEXT,
+                                         proof_attachment TEXT,
                                          CONSTRAINT fk_qualifying_exams_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -148,9 +148,9 @@ CREATE TABLE public.student_awards (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
-                                       name_of_the_student TEXT,
-                                       details_of_the_award TEXT,
-                                       proof_as_an_attachment TEXT,
+                                       student_name TEXT,
+                                       award_details TEXT,
+                                       proof_attachment TEXT,
                                        CONSTRAINT fk_student_awards_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -158,10 +158,10 @@ CREATE TABLE public.student_placements (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            program TEXT,
-                                           no_of_students_appeared_for_final_year_exam TEXT,
-                                           no_of_students_placed TEXT,
+                                           students_appeared TEXT,
+                                           students_placed TEXT,
                                            placement_percent TEXT,
-                                           proof_as_attachment TEXT,
+                                           proof_attachment TEXT,
                                            CONSTRAINT fk_student_placements_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -169,8 +169,8 @@ CREATE TABLE public.higher_studies (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        program TEXT,
-                                       no_of_students_appeared_for_final_year_exam TEXT,
-                                       no_of_students_selected_for_higher_studies TEXT,
+                                       students_appeared TEXT,
+                                       selected_students TEXT,
                                        students_percent TEXT,
                                        CONSTRAINT fk_higher_studies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
@@ -179,9 +179,9 @@ CREATE TABLE public.student_startups (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          sn TEXT,
-                                         name_of_the_student TEXT,
-                                         name_of_the_venture_start_up TEXT,
-                                         link_to_relevant_proof TEXT,
+                                         student_name TEXT,
+                                         venture_name TEXT,
+                                         link_proof TEXT,
                                          CONSTRAINT fk_student_startups_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -193,7 +193,7 @@ CREATE TABLE public.student_courses (
                                         year_of_study TEXT,
                                         name_of_course TEXT,
                                         duration TEXT,
-                                        link_to_relevant_proof TEXT,
+                                        link_proof TEXT,
                                         CONSTRAINT fk_student_courses_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -201,13 +201,13 @@ CREATE TABLE public.alumni_interactions (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
-                                            name_of_alumni TEXT,
+                                            alumni_name TEXT,
                                             designation TEXT,
                                             present_employer TEXT,
-                                            date_on_interaction TEXT,
+                                            interaction_date TEXT,
                                             topic TEXT,
                                             no_of_beneficiaries TEXT,
-                                            link_to_relevant_proof TEXT,
+                                            link_proof TEXT,
                                             CONSTRAINT fk_alumni_interactions_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -215,12 +215,12 @@ CREATE TABLE public.guest_lectures (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
-                                       name_of_the_resource_person TEXT,
-                                       designation_and_organization TEXT,
-                                       date_of_conduction TEXT,
+                                       resource_person TEXT,
+                                       designation_org TEXT,
+                                       conduction_date TEXT,
                                        topic TEXT,
-                                       number_of_beneficiaries TEXT,
-                                       link_to_relevant_proof TEXT,
+                                       no_beneficiaries TEXT,
+                                       link_proof TEXT,
                                        CONSTRAINT fk_guest_lectures_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -228,11 +228,11 @@ CREATE TABLE public.professional_bodies (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
-                                            name_of_the_professional_body_chapter_student_club TEXT,
-                                            no_of_student_members TEXT,
-                                            date_of_event_conduction TEXT,
-                                            title_of_the_event TEXT,
-                                            link_to_relevant_proof TEXT,
+                                            body_name TEXT,
+                                            student_members TEXT,
+                                            event_date TEXT,
+                                            event_name TEXT,
+                                            link_proof TEXT,
                                             CONSTRAINT fk_professional_bodies_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -240,11 +240,11 @@ CREATE TABLE public.value_added_courses (
                                             id BIGSERIAL PRIMARY KEY,
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
-                                            title_of_the_course TEXT,
-                                            details_of_resource_person TEXT,
-                                            duration_and_date_of_conduction TEXT,
+                                            course_title TEXT,
+                                            resource_person TEXT,
+                                            duration_date TEXT,
                                             no_of_beneficiaries TEXT,
-                                            link_to_relevant_proof TEXT,
+                                            link_proof TEXT,
                                             CONSTRAINT fk_value_added_courses_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -253,10 +253,10 @@ CREATE TABLE public.career_guidance (
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
                                         session_details TEXT,
-                                        resource_person_details TEXT,
-                                        date_of_conduction TEXT,
-                                        number_of_beneficiaries TEXT,
-                                        link_to_relevant_proof TEXT,
+                                        resource_person TEXT,
+                                        conduction_date TEXT,
+                                        no_beneficiaries TEXT,
+                                        link_proof TEXT,
                                         CONSTRAINT fk_career_guidance_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -266,9 +266,9 @@ CREATE TABLE public.extension_activities (
                                              sr_no TEXT,
                                              activity_details TEXT,
                                              organized_by TEXT,
-                                             date_of_conduction TEXT,
-                                             number_of_beneficiaries TEXT,
-                                             link_to_relevant_proof TEXT,
+                                             conduction_date TEXT,
+                                             no_beneficiaries TEXT,
+                                             link_proof TEXT,
                                              CONSTRAINT fk_extension_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -280,38 +280,38 @@ CREATE TABLE public.faculty_specialization (
                                                designation TEXT,
                                                qualifications TEXT,
                                                specialization TEXT,
-                                               no_of_phd_supervised TEXT,
+                                               phd_supervised TEXT,
                                                CONSTRAINT fk_faculty_specialization_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE public.research_publications (
                                               id BIGSERIAL PRIMARY KEY,
                                               submission_id BIGINT NOT NULL,
-                                              title_of_paper TEXT,
-                                              name_of_author TEXT,
-                                              name_of_journal TEXT,
-                                              year_of_publication_with_volume_and_page TEXT,
+                                              paper_title TEXT,
+                                              author_name TEXT,
+                                              journal_name TEXT,
+                                              publication_details TEXT,
                                               isbn_issn TEXT,
-                                              indicate_ugc_approved_journal TEXT,
-                                              national_international_journal TEXT,
+                                              ugc_approved TEXT,
+                                              journal_type TEXT,
                                               impact_factor TEXT,
-                                              link_to_relevant_proof TEXT,
+                                              link_proof TEXT,
                                               CONSTRAINT fk_research_publications_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE public.books_chapters (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
-                                       name_of_the_teacher TEXT,
-                                       title_of_the_book_chapters_published TEXT,
-                                       title_of_the_paper TEXT,
-                                       title_of_the_proceedings_of_the_conference TEXT,
-                                       name_of_the_conference TEXT,
-                                       national_international TEXT,
-                                       year_of_publication TEXT,
-                                       isbn_issn_number TEXT,
-                                       name_of_the_publisher TEXT,
-                                       link_to_relevant_proof TEXT,
+                                       teacher_name TEXT,
+                                       book_chapters_title TEXT,
+                                       paper_title TEXT,
+                                       proceedings_title TEXT,
+                                       conference_name TEXT,
+                                       scope TEXT,
+                                       publication_year TEXT,
+                                       isbn_issn TEXT,
+                                       publisher_name TEXT,
+                                       link_proof TEXT,
                                        CONSTRAINT fk_books_chapters_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -319,22 +319,22 @@ CREATE TABLE public.corporate_training (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
-                                           name_of_faculty TEXT,
-                                           agency_seeking_training TEXT,
+                                           faculty_name TEXT,
+                                           training_agency TEXT,
                                            revenue_generated TEXT,
                                            number_of_trainees TEXT,
-                                           link_to_relevant_proof TEXT,
+                                           link_proof TEXT,
                                            CONSTRAINT fk_corporate_training_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE public.consultancy (
                                     id BIGSERIAL PRIMARY KEY,
                                     submission_id BIGINT NOT NULL,
-                                    name_of_the_faculty TEXT,
-                                    title_of_the_consultancy_project TEXT,
-                                    consulting_sponsoring_agency TEXT,
+                                    faculty_name TEXT,
+                                    project_title TEXT,
+                                    sponsoring_agency TEXT,
                                     revenue_generated TEXT,
-                                    link_to_relevant_proof TEXT,
+                                    link_proof TEXT,
                                     CONSTRAINT fk_consultancy_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -342,13 +342,13 @@ CREATE TABLE public.research_funds (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
-                                       name_of_the_project_endowments_chairs TEXT,
-                                       name_of_the_principal_investigator TEXT,
-                                       department_of_principal_investigator TEXT,
+                                       project_name TEXT,
+                                       principal_investigator TEXT,
+                                       department_pi TEXT,
                                        year_of_award TEXT,
                                        funds_provided TEXT,
-                                       duration_of_the_project TEXT,
-                                       link_to_relevant_proof TEXT,
+                                       project_duration TEXT,
+                                       link_proof TEXT,
                                        CONSTRAINT fk_research_funds_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -356,21 +356,21 @@ CREATE TABLE public.e_contents (
                                    id BIGSERIAL PRIMARY KEY,
                                    submission_id BIGINT NOT NULL,
                                    sr_no TEXT,
-                                   name_of_the_teacher TEXT,
-                                   name_of_the_module TEXT,
-                                   platform_on_which_module_is_developed TEXT,
-                                   date_of_launching_e_content TEXT,
-                                   link_to_relevant_proof TEXT,
+                                   teacher_name TEXT,
+                                   module_name TEXT,
+                                   platform TEXT,
+                                   launch_date TEXT,
+                                   link_proof TEXT,
                                    CONSTRAINT fk_e_contents_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE public.teacher_awards (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
-                                       name_of_the_teacher TEXT,
+                                       teacher_name TEXT,
                                        national_awards TEXT,
                                        international_awards TEXT,
-                                       link_to_relevant_proof TEXT,
+                                       link_proof TEXT,
                                        CONSTRAINT fk_teacher_awards_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -378,13 +378,13 @@ CREATE TABLE public.patents_copyrights (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            sr_no TEXT,
-                                           name_of_faculty_student TEXT,
+                                           inventor_name TEXT,
                                            application_no TEXT,
-                                           title_of_patent_copyright TEXT,
+                                           title TEXT,
                                            date_of_filing TEXT,
                                            date_of_publication TEXT,
                                            date_of_award TEXT,
-                                           link_to_relevant_proof TEXT,
+                                           link_proof TEXT,
                                            CONSTRAINT fk_patents_copyrights_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -392,13 +392,13 @@ CREATE TABLE public.fdp_organized (
                                       id BIGSERIAL PRIMARY KEY,
                                       submission_id BIGINT NOT NULL,
                                       sl_no TEXT,
-                                      name_of_convener_coordinator TEXT,
-                                      title_of_seminar_course TEXT,
+                                      coordinator TEXT,
+                                      seminar_title TEXT,
                                       sponsoring_agency TEXT,
-                                      duration_with_dates TEXT,
-                                      no_of_internal_and_external_participants TEXT,
-                                      proceedings_published_yes_no TEXT,
-                                      link_to_relevant_proof TEXT,
+                                      duration_dates TEXT,
+                                      participants_count TEXT,
+                                      published TEXT,
+                                      link_proof TEXT,
                                       CONSTRAINT fk_fdp_organized_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -406,12 +406,12 @@ CREATE TABLE public.fdp_attended (
                                      id BIGSERIAL PRIMARY KEY,
                                      submission_id BIGINT NOT NULL,
                                      sl_no TEXT,
-                                     name_of_faculty TEXT,
-                                     title_of_seminar_course TEXT,
-                                     sponsoring_agency_organization TEXT,
-                                     duration_with_dates TEXT,
+                                     faculty_name TEXT,
+                                     seminar_title TEXT,
+                                     sponsoring_org TEXT,
+                                     duration_dates TEXT,
                                      date TEXT,
-                                     link_to_relevant_proof TEXT,
+                                     link_proof TEXT,
                                      CONSTRAINT fk_fdp_attended_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -419,11 +419,11 @@ CREATE TABLE public.functional_mous (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
-                                        name_of_the_organization_institution_industry TEXT,
-                                        year_of_signing_mou TEXT,
-                                        duration_of_mou TEXT,
-                                        list_the_actual_activities_under_each_mou TEXT,
-                                        link_to_relevant_proof TEXT,
+                                        partner_org TEXT,
+                                        signing_year TEXT,
+                                        mou_duration TEXT,
+                                        activities TEXT,
+                                        link_proof TEXT,
                                         CONSTRAINT fk_functional_mous_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -471,10 +471,10 @@ CREATE TABLE public.courses_offered (
                                         id BIGSERIAL PRIMARY KEY,
                                         submission_id BIGINT NOT NULL,
                                         sr_no TEXT,
-                                        name_of_the_program TEXT,
+                                        program_name TEXT,
                                         level_ug_pg TEXT,
                                         intake TEXT,
-                                        year_of_commencement_of_the_program TEXT,
+                                        commencement_year TEXT,
                                         CONSTRAINT fk_courses_offered_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -486,7 +486,7 @@ CREATE TABLE public.student_statistics (
                                            ug TEXT,
                                            pg TEXT,
                                            phd TEXT,
-                                           value_added_skill_courses TEXT,
+                                           skill_courses TEXT,
                                            CONSTRAINT fk_student_statistics_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -517,11 +517,11 @@ CREATE TABLE public.scholarship_summary (
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
                                             year TEXT,
-                                            title_of_scholarship TEXT,
-                                            number_of_the_students TEXT,
+                                            scholarship_title TEXT,
+                                            students_count TEXT,
                                             amount_received TEXT,
                                             awarding_agency TEXT,
-                                            awarding_organization TEXT,
+                                            awarding_org TEXT,
                                             CONSTRAINT fk_scholarship_summary_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -530,8 +530,8 @@ CREATE TABLE public.scholarship_students (
                                              submission_id BIGINT NOT NULL,
                                              sr_no TEXT,
                                              year TEXT,
-                                             title_of_scholarship TEXT,
-                                             name_of_the_students TEXT,
+                                             scholarship_title TEXT,
+                                             student_name TEXT,
                                              amount_received TEXT,
                                              awarding_agency TEXT,
                                              CONSTRAINT fk_scholarship_students_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
@@ -561,12 +561,12 @@ CREATE TABLE public.faculty_experience (
                                            id BIGSERIAL PRIMARY KEY,
                                            submission_id BIGINT NOT NULL,
                                            s_no TEXT,
-                                           name_of_the_faculty TEXT,
+                                           faculty_name TEXT,
                                            designation TEXT,
-                                           highest_qualification TEXT,
-                                           date_of_joining TEXT,
-                                           experience_in_dypiu TEXT,
-                                           experience_before_joining_dypiu TEXT,
+                                           qualification TEXT,
+                                           joining_date TEXT,
+                                           experience_dypiu TEXT,
+                                           prior_experience TEXT,
                                            total_experience TEXT,
                                            CONSTRAINT fk_faculty_experience_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
@@ -575,12 +575,12 @@ CREATE TABLE public.supporting_staff (
                                          id BIGSERIAL PRIMARY KEY,
                                          submission_id BIGINT NOT NULL,
                                          s_no TEXT,
-                                         name_of_the_supporting_staff TEXT,
+                                         staff_name TEXT,
                                          designation TEXT,
-                                         highest_qualification TEXT,
-                                         date_of_joining_in_dypiu TEXT,
-                                         experience_in_dypiu TEXT,
-                                         experience_before_joining_dypiu TEXT,
+                                         qualification TEXT,
+                                         joining_date TEXT,
+                                         experience_dypiu TEXT,
+                                         prior_experience TEXT,
                                          total_experience TEXT,
                                          CONSTRAINT fk_supporting_staff_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
@@ -589,9 +589,9 @@ CREATE TABLE public.staff_training (
                                        id BIGSERIAL PRIMARY KEY,
                                        submission_id BIGINT NOT NULL,
                                        sr_no TEXT,
-                                       title_of_the_course TEXT,
-                                       details_of_resource_person TEXT,
-                                       duration_and_date_of_conduction TEXT,
+                                       course_title TEXT,
+                                       resource_person TEXT,
+                                       duration_date TEXT,
                                        no_of_beneficiaries TEXT,
                                        CONSTRAINT fk_staff_training_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
@@ -667,8 +667,8 @@ CREATE TABLE public.hackathons (
                                    sr_no TEXT,
                                    activity_details TEXT,
                                    organized_by TEXT,
-                                   date_of_conduction TEXT,
-                                   number_of_beneficiaries_participants TEXT,
+                                   conduction_date TEXT,
+                                   participants_count TEXT,
                                    CONSTRAINT fk_hackathons_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -678,8 +678,8 @@ CREATE TABLE public.cultural_activities (
                                             sr_no TEXT,
                                             activity_details TEXT,
                                             organized_by TEXT,
-                                            date_of_conduction TEXT,
-                                            number_of_beneficiaries_participants TEXT,
+                                            conduction_date TEXT,
+                                            participants_count TEXT,
                                             CONSTRAINT fk_cultural_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -689,8 +689,8 @@ CREATE TABLE public.sports_activities (
                                           sr_no TEXT,
                                           activity_details TEXT,
                                           organized_by TEXT,
-                                          date_of_conduction TEXT,
-                                          number_of_beneficiaries_participants TEXT,
+                                          conduction_date TEXT,
+                                          participants_count TEXT,
                                           CONSTRAINT fk_sports_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -700,8 +700,8 @@ CREATE TABLE public.community_activities (
                                              sr_no TEXT,
                                              activity_details TEXT,
                                              organized_by TEXT,
-                                             date_of_conduction TEXT,
-                                             number_of_beneficiaries_participants TEXT,
+                                             conduction_date TEXT,
+                                             participants_count TEXT,
                                              CONSTRAINT fk_community_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -709,11 +709,11 @@ CREATE TABLE public.admin_student_awards (
                                              id BIGSERIAL PRIMARY KEY,
                                              submission_id BIGINT NOT NULL,
                                              sr_no TEXT,
-                                             name_of_the_award TEXT,
+                                             award_name TEXT,
                                              team_individual TEXT,
-                                             inter_university_state_national_international TEXT,
-                                             name_of_the_event TEXT,
-                                             name_of_the_student TEXT,
+                                             level_type TEXT,
+                                             event_name TEXT,
+                                             student_name TEXT,
                                              CONSTRAINT fk_admin_student_awards_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -722,9 +722,9 @@ CREATE TABLE public.training_activities (
                                             submission_id BIGINT NOT NULL,
                                             sr_no TEXT,
                                             academic_year TEXT,
-                                            title_of_the_event TEXT,
-                                            date_of_conduction TEXT,
-                                            no_of_students_benefited TEXT,
+                                            event_name TEXT,
+                                            conduction_date TEXT,
+                                            students_benefited TEXT,
                                             CONSTRAINT fk_training_activities_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 
@@ -732,10 +732,10 @@ CREATE TABLE public.industry_collaborations (
                                                 id BIGSERIAL PRIMARY KEY,
                                                 submission_id BIGINT NOT NULL,
                                                 sr_no TEXT,
-                                                name_of_the_organization_institution_industry_with_whom_mou_is_signed TEXT,
-                                                year_of_signing_mou TEXT,
-                                                duration_of_mou TEXT,
-                                                list_the_actual_activities_under_each_mou TEXT,
+                                                partner_org TEXT,
+                                                signing_year TEXT,
+                                                mou_duration TEXT,
+                                                activities TEXT,
                                                 CONSTRAINT fk_industry_collaborations_submission FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE
 );
 

@@ -24,13 +24,13 @@ public class StaffTraining {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "course_title", columnDefinition = "TEXT")
     private String titleOfTheCourse;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "resource_person", columnDefinition = "TEXT")
     private String detailsOfResourcePerson;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "duration_date", columnDefinition = "TEXT")
     private String durationAndDateOfConduction;
 
     @Column(columnDefinition = "TEXT")

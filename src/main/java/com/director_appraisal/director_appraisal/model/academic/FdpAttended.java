@@ -24,22 +24,22 @@ public class FdpAttended {
     @Column(columnDefinition = "TEXT")
     private String slNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "faculty_name", columnDefinition = "TEXT")
     private String nameOfFaculty;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "seminar_title", columnDefinition = "TEXT")
     private String titleOfSeminarCourse;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "sponsoring_org", columnDefinition = "TEXT")
     private String sponsoringAgencyOrganization;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "duration_dates", columnDefinition = "TEXT")
     private String durationWithDates;
 
     @Column(columnDefinition = "TEXT")
     private String date;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

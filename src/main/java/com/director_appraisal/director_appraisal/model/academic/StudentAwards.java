@@ -24,13 +24,13 @@ public class StudentAwards {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "student_name", columnDefinition = "TEXT")
     private String nameOfTheStudent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "award_details", columnDefinition = "TEXT")
     private String detailsOfTheAward;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "proof_attachment", columnDefinition = "TEXT")
     private String proofAsAnAttachment;
 
 }

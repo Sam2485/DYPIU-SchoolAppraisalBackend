@@ -27,7 +27,7 @@ public class ObeImplementation {
     @Column(columnDefinition = "TEXT")
     private String particular;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_document", columnDefinition = "TEXT")
     private String linkForTheDocument;
 
 }

@@ -24,19 +24,19 @@ public class ProfessionalBodies {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "body_name", columnDefinition = "TEXT")
     private String nameOfTheProfessionalBodyChapterStudentClub;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "student_members", columnDefinition = "TEXT")
     private String noOfStudentMembers;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "event_date", columnDefinition = "TEXT")
     private String dateOfEventConduction;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "event_name", columnDefinition = "TEXT")
     private String titleOfTheEvent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

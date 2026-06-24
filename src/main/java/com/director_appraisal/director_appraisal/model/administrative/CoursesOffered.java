@@ -24,7 +24,7 @@ public class CoursesOffered {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "program_name", columnDefinition = "TEXT")
     private String nameOfTheProgram;
 
     @Column(columnDefinition = "TEXT")
@@ -33,7 +33,7 @@ public class CoursesOffered {
     @Column(columnDefinition = "TEXT")
     private String intake;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "commencement_year", columnDefinition = "TEXT")
     private String yearOfCommencementOfTheProgram;
 
 }

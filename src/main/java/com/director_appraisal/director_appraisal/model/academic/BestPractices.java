@@ -30,7 +30,7 @@ public class BestPractices {
     @Column(columnDefinition = "TEXT")
     private String availability;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_document", columnDefinition = "TEXT")
     private String linkForTheDocument;
 
 }

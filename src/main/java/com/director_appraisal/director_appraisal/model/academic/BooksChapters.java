@@ -21,34 +21,34 @@ public class BooksChapters {
     @Column(nullable = false)
     private Long submissionId;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "teacher_name", columnDefinition = "TEXT")
     private String nameOfTheTeacher;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "book_chapters_title", columnDefinition = "TEXT")
     private String titleOfTheBookChaptersPublished;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "paper_title", columnDefinition = "TEXT")
     private String titleOfThePaper;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "proceedings_title", columnDefinition = "TEXT")
     private String titleOfTheProceedingsOfTheConference;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "conference_name", columnDefinition = "TEXT")
     private String nameOfTheConference;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "scope", columnDefinition = "TEXT")
     private String nationalInternational;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "publication_year", columnDefinition = "TEXT")
     private String yearOfPublication;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "isbn_issn", columnDefinition = "TEXT")
     private String isbnIssnNumber;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "publisher_name", columnDefinition = "TEXT")
     private String nameOfThePublisher;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

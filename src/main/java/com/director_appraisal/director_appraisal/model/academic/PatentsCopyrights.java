@@ -24,13 +24,13 @@ public class PatentsCopyrights {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "inventor_name", columnDefinition = "TEXT")
     private String nameOfFacultyStudent;
 
     @Column(columnDefinition = "TEXT")
     private String applicationNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "title", columnDefinition = "TEXT")
     private String titleOfPatentCopyright;
 
     @Column(columnDefinition = "TEXT")
@@ -42,7 +42,7 @@ public class PatentsCopyrights {
     @Column(columnDefinition = "TEXT")
     private String dateOfAward;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

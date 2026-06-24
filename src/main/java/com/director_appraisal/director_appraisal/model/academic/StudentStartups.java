@@ -24,13 +24,13 @@ public class StudentStartups {
     @Column(columnDefinition = "TEXT")
     private String sn;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "student_name", columnDefinition = "TEXT")
     private String nameOfTheStudent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "venture_name", columnDefinition = "TEXT")
     private String nameOfTheVentureStartUp;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

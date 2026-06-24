@@ -30,10 +30,10 @@ public class Hackathons {
     @Column(columnDefinition = "TEXT")
     private String organizedBy;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "conduction_date", columnDefinition = "TEXT")
     private String dateOfConduction;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "participants_count", columnDefinition = "TEXT")
     private String numberOfBeneficiariesParticipants;
 
 }

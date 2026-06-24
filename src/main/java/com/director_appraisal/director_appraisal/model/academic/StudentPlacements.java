@@ -24,16 +24,16 @@ public class StudentPlacements {
     @Column(columnDefinition = "TEXT")
     private String program;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_appeared", columnDefinition = "TEXT")
     private String noOfStudentsAppearedForFinalYearExam;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_placed", columnDefinition = "TEXT")
     private String noOfStudentsPlaced;
 
     @Column(columnDefinition = "TEXT")
     private String placementPercent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "proof_attachment", columnDefinition = "TEXT")
     private String proofAsAttachment;
 
 }

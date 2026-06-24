@@ -24,19 +24,19 @@ public class EContents {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "teacher_name", columnDefinition = "TEXT")
     private String nameOfTheTeacher;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "module_name", columnDefinition = "TEXT")
     private String nameOfTheModule;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "platform", columnDefinition = "TEXT")
     private String platformOnWhichModuleIsDeveloped;
 
-    @Column(name = "date_of_launching_e_content", columnDefinition = "TEXT")
+    @Column(name = "launch_date", columnDefinition = "TEXT")
     private String dateOfLaunchingEContent;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

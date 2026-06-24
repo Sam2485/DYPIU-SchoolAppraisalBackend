@@ -24,13 +24,13 @@ public class QualifyingExams {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "student_name", columnDefinition = "TEXT")
     private String nameOfTheStudent;
 
     @Column(columnDefinition = "TEXT")
     private String examinationDetails;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "proof_attachment", columnDefinition = "TEXT")
     private String proofAsAttachment;
 
 }

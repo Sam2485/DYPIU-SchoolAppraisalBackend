@@ -24,13 +24,13 @@ public class ResearchFunds {
     @Column(columnDefinition = "TEXT")
     private String srNo;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "project_name", columnDefinition = "TEXT")
     private String nameOfTheProjectEndowmentsChairs;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "principal_investigator", columnDefinition = "TEXT")
     private String nameOfThePrincipalInvestigator;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "department_pi", columnDefinition = "TEXT")
     private String departmentOfPrincipalInvestigator;
 
     @Column(columnDefinition = "TEXT")
@@ -39,10 +39,10 @@ public class ResearchFunds {
     @Column(columnDefinition = "TEXT")
     private String fundsProvided;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "project_duration", columnDefinition = "TEXT")
     private String durationOfTheProject;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

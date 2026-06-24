@@ -21,31 +21,31 @@ public class ResearchPublications {
     @Column(nullable = false)
     private Long submissionId;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "paper_title", columnDefinition = "TEXT")
     private String titleOfPaper;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "author_name", columnDefinition = "TEXT")
     private String nameOfAuthor;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "journal_name", columnDefinition = "TEXT")
     private String nameOfJournal;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "publication_details", columnDefinition = "TEXT")
     private String yearOfPublicationWithVolumeAndPage;
 
     @Column(columnDefinition = "TEXT")
     private String isbnIssn;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "ugc_approved", columnDefinition = "TEXT")
     private String indicateUgcApprovedJournal;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "journal_type", columnDefinition = "TEXT")
     private String nationalInternationalJournal;
 
     @Column(columnDefinition = "TEXT")
     private String impactFactor;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

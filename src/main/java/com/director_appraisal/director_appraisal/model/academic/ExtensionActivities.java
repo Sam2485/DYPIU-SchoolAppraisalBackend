@@ -30,13 +30,13 @@ public class ExtensionActivities {
     @Column(columnDefinition = "TEXT")
     private String organizedBy;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "conduction_date", columnDefinition = "TEXT")
     private String dateOfConduction;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "no_beneficiaries", columnDefinition = "TEXT")
     private String numberOfBeneficiaries;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

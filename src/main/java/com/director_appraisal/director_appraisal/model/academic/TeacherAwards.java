@@ -21,7 +21,7 @@ public class TeacherAwards {
     @Column(nullable = false)
     private Long submissionId;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "teacher_name", columnDefinition = "TEXT")
     private String nameOfTheTeacher;
 
     @Column(columnDefinition = "TEXT")
@@ -30,7 +30,7 @@ public class TeacherAwards {
     @Column(columnDefinition = "TEXT")
     private String internationalAwards;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "link_proof", columnDefinition = "TEXT")
     private String linkToRelevantProof;
 
 }

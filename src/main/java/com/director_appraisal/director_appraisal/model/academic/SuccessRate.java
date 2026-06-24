@@ -24,10 +24,10 @@ public class SuccessRate {
     @Column(columnDefinition = "TEXT")
     private String program;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_appeared", columnDefinition = "TEXT")
     private String noOfStudentsAppearedForFinalSemesterExam;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "students_cleared", columnDefinition = "TEXT")
     private String numberOfStudentsClearedProgramInStipulatedDuration;
 
     @Column(columnDefinition = "TEXT")
