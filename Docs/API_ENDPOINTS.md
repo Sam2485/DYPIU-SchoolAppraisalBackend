@@ -162,9 +162,148 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
   }
   ```
 
+### Upload Multiple PDF Documents
+- **URL**: `/upload-multiple`
+- **Method**: `POST`
+- **Content-Type**: `multipart/form-data`
+- **Request Parameters**:
+  - `files` (Array of Multipart files, optional, PDF only, max 10MB each).
+  - `file` (Array of Multipart files, optional, fallback parameter name).
+- **Response (200 OK)**:
+  ```json
+  [
+    {
+      "name": "syllabus_mom.pdf",
+      "url": "/uploads/users/5a7f9e8a/attachments/8d9c2b4a.pdf"
+    },
+    {
+      "name": "nep_policy.pdf",
+      "url": "/uploads/users/5a7f9e8a/attachments/7e8a9b2c.pdf"
+    }
+  ]
+  ```
+
+### Delete PDF Document
+- **URL**: `/delete`
+- **Method**: `DELETE`
+- **Query Parameters**:
+  - `url` (String, optional): The URL of the attachment to delete.
+- **Request Body**: Fallback JSON if `url` is not passed as a query parameter:
+  ```json
+  {
+    "url": "/uploads/users/5a7f9e8a/attachments/8d9c2b4a.pdf"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "message": "File deleted successfully."
+  }
+  ```
+- **Authorization**: Uploader must be the owner of the target file (checked via uploader key prefix checking).
+
 ---
 
-## 4. Relational Child Audit Tables API (64 Tables)
+## 4. User Management Module (IQAC Users Only)
+**Base Path**: `/api/users`
+**Headers**: `Authorization: Bearer <jwt-token>`
+
+This module provides full CRUD capabilities over user profiles. Access is restricted to users with the `iqac` role.
+
+### Retrieve All Users
+- **URL**: `/`
+- **Method**: `GET`
+- **Response (200 OK)**:
+  ```json
+  {
+    "users": [
+      {
+        "id": 2,
+        "name": "Academic Director SoCSEA",
+        "email": "director.socsea@dypiu.ac.in",
+        "category": "academic",
+        "role": "director",
+        "school": "School of Computer Science & Applications",
+        "designation": "Director",
+        "post": null,
+        "status": "active"
+      },
+      {
+        "id": 3,
+        "name": "Registrar Admin",
+        "email": "registrar@dypiu.ac.in",
+        "category": "administrative",
+        "role": "administrative",
+        "school": "Administrative Office",
+        "designation": "Registrar",
+        "post": "registrar",
+        "status": "active"
+      }
+    ]
+  }
+  ```
+
+### Create User
+- **URL**: `/`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "category": "academic", // "academic" or "administrative"
+    "role": "director",      // must match category ("director" for academic, "administrative" for administrative)
+    "school": "School of Computer Science & Applications", // Selected School (or "Administrative Office" for admin category)
+    "designation": "Director", // Optional custom designation (if empty, matches defaults/posts)
+    "post": null, // Required if category is "administrative": "registrar", "hr", "dean-student-welfare", "dean-placement"
+    "name": "Full Name",
+    "email": "user@dypiu.ac.in",
+    "password": "Password123" // Minimum 6 characters
+  }
+  ```
+- **Response (201 Created)**:
+  ```json
+  {
+    "message": "User created successfully",
+    "user": {
+      "id": 4,
+      "name": "Full Name",
+      "email": "user@dypiu.ac.in",
+      "category": "academic",
+      "role": "director",
+      "school": "School of Computer Science & Applications",
+      "designation": "Director",
+      "post": null,
+      "status": "active"
+    }
+  }
+  ```
+
+### Update User
+- **URL**: `/{id}`
+- **Method**: `PUT`
+- **Request Body**: Same schema as Create User. Email updates are verified for conflicts. Password is optional (updates only if not blank).
+- **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "User updated successfully",
+    "user": { ... }
+  }
+  ```
+
+### Delete User
+- **URL**: `/{id}`
+- **Method**: `DELETE`
+- **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "User deleted successfully"
+  }
+  ```
+
+---
+
+## 5. Relational Child Audit Tables API (64 Tables)
 **Base Path**: `/api/tables`
 **Headers**: `Authorization: Bearer <jwt-token>`
 

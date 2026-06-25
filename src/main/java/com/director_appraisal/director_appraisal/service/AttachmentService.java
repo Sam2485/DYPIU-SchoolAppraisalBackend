@@ -19,10 +19,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class AttachmentService {
@@ -58,9 +57,6 @@ public class AttachmentService {
     public AttachmentResponse uploadFile(MultipartFile file) throws IOException {
         validateFile(file);
         UploadCandidate candidate = buildUploadCandidate(file);
-        if (fileExists(candidate.objectName)) {
-            throw new IllegalArgumentException("This file has already been uploaded.");
-        }
         return storeFile(candidate);
     }
 
@@ -73,23 +69,9 @@ public class AttachmentService {
             validateFile(file);
         }
 
-        Map<String, UploadCandidate> candidates = new LinkedHashMap<>();
-        for (MultipartFile file : files) {
-            UploadCandidate candidate = buildUploadCandidate(file);
-            if (candidates.putIfAbsent(candidate.objectName, candidate) != null) {
-                throw new IllegalArgumentException("Duplicate file selected: " + candidate.originalFilename);
-            }
-        }
-
-        for (UploadCandidate candidate : candidates.values()) {
-            if (fileExists(candidate.objectName)) {
-                throw new IllegalArgumentException("This file has already been uploaded: " + candidate.originalFilename);
-            }
-        }
-
         List<AttachmentResponse> responses = new ArrayList<>();
-        for (UploadCandidate candidate : candidates.values()) {
-            responses.add(storeFile(candidate));
+        for (MultipartFile file : files) {
+            responses.add(storeFile(buildUploadCandidate(file)));
         }
         return responses;
     }
@@ -129,19 +111,16 @@ public class AttachmentService {
     private UploadCandidate buildUploadCandidate(MultipartFile file) throws IOException {
         String originalFilename = file.getOriginalFilename();
         byte[] content = file.getBytes();
-        String contentHash = hashSha256(content);
-        String objectName = "users/" + getCurrentUserKey() + "/attachments/" + contentHash + ".pdf";
+        String objectName = "users/" + getCurrentUserKey() + "/attachments/" + UUID.randomUUID() + "-" + sanitizeFilename(originalFilename);
         return new UploadCandidate(originalFilename, objectName, content);
     }
 
-    private boolean fileExists(String objectName) {
-        if (useGcp) {
-            return storage.get(BlobId.of(bucketName, objectName)) != null;
-        }
-
-        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
-        Path targetLocation = uploadDir.resolve(objectName).normalize();
-        return Files.exists(targetLocation);
+    private String sanitizeFilename(String filename) {
+        String normalizedFilename = filename.replace("\\", "/");
+        int lastSlashIndex = normalizedFilename.lastIndexOf('/');
+        String baseFilename = lastSlashIndex >= 0 ? normalizedFilename.substring(lastSlashIndex + 1) : normalizedFilename;
+        String safeFilename = baseFilename.replaceAll("[^A-Za-z0-9._-]", "_");
+        return safeFilename.isBlank() ? "attachment.pdf" : safeFilename;
     }
 
     private String extractObjectName(String fileUrl) {
