@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,6 +94,21 @@ public class AttachmentService {
         return responses;
     }
 
+    public boolean deleteFile(String fileUrl) throws IOException {
+        String objectName = extractObjectName(fileUrl);
+
+        if (useGcp) {
+            return storage.delete(BlobId.of(bucketName, objectName));
+        }
+
+        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        Path targetLocation = uploadDir.resolve(objectName).normalize();
+        if (!targetLocation.startsWith(uploadDir)) {
+            throw new IllegalArgumentException("Invalid attachment URL.");
+        }
+        return Files.deleteIfExists(targetLocation);
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is required.");
@@ -126,6 +142,45 @@ public class AttachmentService {
         Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
         Path targetLocation = uploadDir.resolve(objectName).normalize();
         return Files.exists(targetLocation);
+    }
+
+    private String extractObjectName(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new IllegalArgumentException("Attachment URL is required.");
+        }
+
+        String objectName;
+        if (fileUrl.startsWith("/uploads/")) {
+            objectName = fileUrl.substring("/uploads/".length());
+        } else {
+            URI uri;
+            try {
+                uri = URI.create(fileUrl);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid attachment URL.");
+            }
+
+            String host = uri.getHost();
+            String path = uri.getPath();
+            String storageHostPrefix = bucketName + ".storage.googleapis.com";
+            String storagePathPrefix = "/" + bucketName + "/";
+
+            if (path != null && path.startsWith("/uploads/")) {
+                objectName = path.substring("/uploads/".length());
+            } else if ("storage.googleapis.com".equalsIgnoreCase(host) && path != null && path.startsWith(storagePathPrefix)) {
+                objectName = path.substring(storagePathPrefix.length());
+            } else if (storageHostPrefix.equalsIgnoreCase(host) && path != null && path.length() > 1) {
+                objectName = path.substring(1);
+            } else {
+                throw new IllegalArgumentException("Invalid attachment URL.");
+            }
+        }
+
+        String userPrefix = "users/" + getCurrentUserKey() + "/attachments/";
+        if (!objectName.startsWith(userPrefix)) {
+            throw new IllegalArgumentException("You can only delete your own uploaded files.");
+        }
+        return objectName;
     }
 
     private AttachmentResponse storeFile(UploadCandidate candidate) throws IOException {
