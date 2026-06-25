@@ -54,12 +54,20 @@ public class UserService implements UserDetailsService {
         return userRepository.findAll();
     }
 
+    public Optional<User> findById(Long id) {
+        return userRepository.findById(id);
+    }
+
     public User createUser(User user) {
         if (userRepository.existsByEmail(user.getEmail())) {
             throw new IllegalArgumentException("User with email " + user.getEmail() + " already exists.");
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
+    }
+
+    public void deleteUser(User user) {
+        userRepository.delete(user);
     }
 
     public boolean checkPassword(String rawPassword, String encodedPassword) {

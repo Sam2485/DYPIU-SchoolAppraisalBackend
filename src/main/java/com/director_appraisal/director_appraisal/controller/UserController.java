@@ -96,6 +96,34 @@ public class UserController {
         }
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteUser(Authentication authentication, @PathVariable String id) {
+        ResponseEntity<?> authorizationError = authorizeIqacForDelete(authentication);
+        if (authorizationError != null) {
+            return authorizationError;
+        }
+
+        Long userId;
+        try {
+            userId = Long.valueOf(id);
+        } catch (NumberFormatException e) {
+            return deleteError(HttpStatus.BAD_REQUEST, "Invalid user id");
+        }
+
+        return userService.findById(userId)
+                .map(user -> {
+                    if (!isManagedUser(user)) {
+                        return deleteError(HttpStatus.FORBIDDEN, "You are not authorized to delete users");
+                    }
+
+                    userService.deleteUser(user);
+                    return ResponseEntity.ok(Map.of(
+                            "success", true,
+                            "message", "User deleted successfully"));
+                })
+                .orElseGet(() -> deleteError(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
     private ResponseEntity<?> authorizeIqac(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof User user)) {
             return error(HttpStatus.UNAUTHORIZED, "Authentication is required.");
@@ -103,6 +131,18 @@ public class UserController {
 
         if (!"iqac".equals(normalize(user.getRole()))) {
             return error(HttpStatus.FORBIDDEN, "Only IQAC users can access this resource.");
+        }
+
+        return null;
+    }
+
+    private ResponseEntity<?> authorizeIqacForDelete(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof User user)) {
+            return deleteError(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+
+        if (!"iqac".equals(normalize(user.getRole()))) {
+            return deleteError(HttpStatus.FORBIDDEN, "You are not authorized to delete users");
         }
 
         return null;
@@ -209,6 +249,12 @@ public class UserController {
 
     private ResponseEntity<Map<String, String>> error(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(Map.of("message", message));
+    }
+
+    private ResponseEntity<Map<String, Object>> deleteError(HttpStatus status, String message) {
+        return ResponseEntity.status(status).body(Map.of(
+                "success", false,
+                "message", message));
     }
 
     private String clean(String value) {
