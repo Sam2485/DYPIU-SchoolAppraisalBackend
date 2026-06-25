@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -124,6 +125,58 @@ public class UserController {
                 .orElseGet(() -> deleteError(HttpStatus.NOT_FOUND, "User not found"));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateUser(
+            Authentication authentication,
+            @PathVariable String id,
+            @RequestBody(required = false) CreateUserRequest request) {
+        ResponseEntity<?> authorizationError = authorizeIqacForUpdate(authentication);
+        if (authorizationError != null) {
+            return authorizationError;
+        }
+
+        Long userId;
+        try {
+            userId = Long.valueOf(id);
+        } catch (NumberFormatException e) {
+            return updateError(HttpStatus.BAD_REQUEST, "Invalid user id");
+        }
+
+        Optional<User> existingUser = userService.findById(userId);
+        if (existingUser.isEmpty()) {
+            return updateError(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        User user = existingUser.get();
+        if (!isManagedUser(user)) {
+            return updateError(HttpStatus.FORBIDDEN, "You are not authorized to update users");
+        }
+
+        try {
+            ValidatedUser validatedUser = validateUpdateUserRequest(request);
+            Optional<User> userWithEmail = userService.findByEmail(validatedUser.email);
+            if (userWithEmail.isPresent() && !userWithEmail.get().getId().equals(user.getId())) {
+                return updateError(HttpStatus.CONFLICT, "Email already exists.");
+            }
+
+            user.setName(validatedUser.name);
+            user.setEmail(validatedUser.email);
+            user.setRole(validatedUser.role);
+            user.setSchool(validatedUser.school);
+            user.setDesignation(validatedUser.designation);
+
+            User savedUser = userService.updateUser(user, validatedUser.password);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "User updated successfully",
+                    "user", toUserResponse(savedUser)));
+        } catch (IllegalArgumentException e) {
+            return updateError(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (Exception e) {
+            return updateError(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.");
+        }
+    }
+
     private ResponseEntity<?> authorizeIqac(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof User user)) {
             return error(HttpStatus.UNAUTHORIZED, "Authentication is required.");
@@ -148,7 +201,27 @@ public class UserController {
         return null;
     }
 
+    private ResponseEntity<?> authorizeIqacForUpdate(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof User user)) {
+            return updateError(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+
+        if (!"iqac".equals(normalize(user.getRole()))) {
+            return updateError(HttpStatus.FORBIDDEN, "You are not authorized to update users");
+        }
+
+        return null;
+    }
+
     private ValidatedUser validateCreateUserRequest(CreateUserRequest request) {
+        return validateUserRequest(request, true);
+    }
+
+    private ValidatedUser validateUpdateUserRequest(CreateUserRequest request) {
+        return validateUserRequest(request, false);
+    }
+
+    private ValidatedUser validateUserRequest(CreateUserRequest request, boolean passwordRequired) {
         if (request == null) {
             throw new IllegalArgumentException("Request body is required.");
         }
@@ -171,7 +244,10 @@ public class UserController {
         if (!EMAIL_PATTERN.matcher(email).matches()) {
             throw new IllegalArgumentException("Email must be valid.");
         }
-        if (password == null || password.length() < 6) {
+        if (passwordRequired && isBlank(password)) {
+            throw new IllegalArgumentException("Password is required.");
+        }
+        if (!isBlank(password) && password.length() < 6) {
             throw new IllegalArgumentException("Password must be at least 6 characters.");
         }
         if (isBlank(category)) {
@@ -188,7 +264,7 @@ public class UserController {
             if (!ACADEMIC_SCHOOLS.contains(school)) {
                 throw new IllegalArgumentException("Invalid academic school.");
             }
-            return new ValidatedUser(name, email, password, "director", school, isBlank(designation) ? "Director" : designation);
+            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation);
         }
 
         if ("administrative".equals(category)) {
@@ -211,7 +287,7 @@ public class UserController {
             if (!isBlank(designation) && !mappedDesignation.equals(designation)) {
                 throw new IllegalArgumentException("Designation must match selected administrative post.");
             }
-            return new ValidatedUser(name, email, password, "administrative", school, mappedDesignation);
+            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation);
         }
 
         throw new IllegalArgumentException("Invalid category.");
@@ -257,12 +333,22 @@ public class UserController {
                 "message", message));
     }
 
+    private ResponseEntity<Map<String, Object>> updateError(HttpStatus status, String message) {
+        return ResponseEntity.status(status).body(Map.of(
+                "success", false,
+                "message", message));
+    }
+
     private String clean(String value) {
         return value == null ? null : value.trim();
     }
 
     private String normalize(String value) {
         return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String cleanPassword(String value) {
+        return isBlank(value) ? null : value;
     }
 
     private boolean isBlank(String value) {

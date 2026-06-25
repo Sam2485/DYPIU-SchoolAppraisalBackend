@@ -70,6 +70,13 @@ public class UserService implements UserDetailsService {
         userRepository.delete(user);
     }
 
+    public User updateUser(User user, String rawPassword) {
+        if (rawPassword != null && !rawPassword.isBlank()) {
+            user.setPassword(passwordEncoder.encode(rawPassword));
+        }
+        return userRepository.save(user);
+    }
+
     public boolean checkPassword(String rawPassword, String encodedPassword) {
         return passwordEncoder.matches(rawPassword, encodedPassword);
     }
