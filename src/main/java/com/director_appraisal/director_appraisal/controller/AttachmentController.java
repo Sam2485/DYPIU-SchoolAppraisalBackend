@@ -28,4 +28,18 @@ public class AttachmentController {
             return ResponseEntity.internalServerError().body(Map.of("message", "Failed to upload file: " + e.getMessage()));
         }
     }
+
+    @PostMapping("/upload-multiple")
+    public ResponseEntity<?> uploadFiles(
+            @RequestParam(value = "files", required = false) MultipartFile[] files,
+            @RequestParam(value = "file", required = false) MultipartFile[] fallbackFiles) {
+        try {
+            MultipartFile[] uploadFiles = files != null && files.length > 0 ? files : fallbackFiles;
+            return ResponseEntity.ok(attachmentService.uploadFiles(uploadFiles));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "Failed to upload files: " + e.getMessage()));
+        }
+    }
 }
