@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +48,10 @@ public class UserService implements UserDetailsService {
 
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+
+    public List<User> findAllUsers() {
+        return userRepository.findAll();
     }
 
     public User createUser(User user) {
