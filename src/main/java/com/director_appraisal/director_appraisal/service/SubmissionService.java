@@ -6,6 +6,7 @@ import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
+import com.director_appraisal.director_appraisal.util.SchoolUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,12 +46,13 @@ public class SubmissionService {
                                  String valuesData, String tablesData, String attachments) {
         Submission submission = getOrCreateDraft(email, auditType);
         
-        // Updates can only occur before final approval or during draft/sent-back status
-        if ("APPROVED".equalsIgnoreCase(submission.getStatus())) {
-            throw new IllegalStateException("Cannot edit an approved submission");
+        // Updates can only occur before final approval or during draft/submitted/sent-back status
+        String statusUpper = submission.getStatus().toUpperCase();
+        if (List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED").contains(statusUpper)) {
+            throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
-        submission.setSchool(school);
+        submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
@@ -67,11 +69,12 @@ public class SubmissionService {
                                  String valuesData, String tablesData, String attachments) {
         Submission submission = getOrCreateDraft(email, auditType);
 
-        if ("APPROVED".equalsIgnoreCase(submission.getStatus())) {
-            throw new IllegalStateException("Cannot resubmit an approved submission");
+        String statusUpper = submission.getStatus().toUpperCase();
+        if (List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED").contains(statusUpper)) {
+            throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
-        submission.setSchool(school);
+        submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
@@ -95,11 +98,12 @@ public class SubmissionService {
             throw new IllegalStateException("You are not authorized to edit this submission");
         }
 
-        if ("APPROVED".equalsIgnoreCase(submission.getStatus())) {
-            throw new IllegalStateException("Cannot edit an approved submission");
+        String statusUpper = submission.getStatus().toUpperCase();
+        if (List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED").contains(statusUpper)) {
+            throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
-        submission.setSchool(school);
+        submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
@@ -205,7 +209,9 @@ public class SubmissionService {
         }
 
         if ("academic".equalsIgnoreCase(auditType)) {
-            return submission.getSchool() != null && submission.getSchool().equalsIgnoreCase(auditor.getSchool());
+            String subSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+            String audSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
+            return subSchool != null && subSchool.equalsIgnoreCase(audSchool);
         } else if ("administrative".equalsIgnoreCase(auditType)) {
             Optional<User> submitterOpt = userRepository.findByEmail(submission.getEmail());
             if (submitterOpt.isPresent()) {
@@ -235,7 +241,9 @@ public class SubmissionService {
                     }
                     
                     if ("academic".equalsIgnoreCase(auditType)) {
-                        return auditor.getSchool() != null && auditor.getSchool().equalsIgnoreCase(submission.getSchool());
+                        String subSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+                        String audSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
+                        return audSchool != null && audSchool.equalsIgnoreCase(subSchool);
                     } else {
                         Optional<User> submitterOpt = userRepository.findByEmail(submission.getEmail());
                         if (submitterOpt.isPresent()) {
@@ -349,8 +357,13 @@ public class SubmissionService {
             throw new IllegalStateException("You are not authorized to edit this submission");
         }
 
-        if ("APPROVED".equalsIgnoreCase(submission.getStatus())) {
+        String currentStatus = submission.getStatus().toUpperCase();
+        if ("APPROVED".equals(currentStatus)) {
             throw new IllegalStateException("Cannot edit an approved submission");
+        }
+
+        if (isOwner && List.of("UNDER_REVIEW", "AUDITOR_COMPLETED").contains(currentStatus)) {
+            throw new IllegalStateException("Submitters cannot edit forms once status transitions to UNDER_REVIEW or AUDITOR_COMPLETED");
         }
 
         if (status != null && !status.isBlank()) {

@@ -2,6 +2,7 @@ package com.director_appraisal.director_appraisal.controller;
 
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.service.UserService;
+import com.director_appraisal.director_appraisal.util.SchoolUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,16 +27,6 @@ public class UserController {
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
             "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$",
             Pattern.CASE_INSENSITIVE);
-
-    private static final Set<String> ACADEMIC_SCHOOLS = Set.of(
-            "School of Computer Science & Applications",
-            "School of Bio-Engineering & Bio Science",
-            "School of Continual Education",
-            "School of Engineering, Management & Research",
-            "School of Commerce & Management",
-            "School of Media & Communication Studies",
-            "School of Design",
-            "School of Applied Arts");
 
     private static final String ADMINISTRATIVE_OFFICE = "Administrative Office";
 
@@ -304,9 +295,10 @@ public class UserController {
                 if (isBlank(school)) {
                     throw new IllegalArgumentException("School is required for academic auditors.");
                 }
-                if (!ACADEMIC_SCHOOLS.contains(school)) {
+                if (!SchoolUtils.isValidSchool(school)) {
                     throw new IllegalArgumentException("Invalid academic school.");
                 }
+                school = SchoolUtils.canonicalizeSchool(school);
                 post = null;
                 if (isBlank(designation)) {
                     designation = (auditorType.substring(0, 1).toUpperCase() + auditorType.substring(1)) + " Academic Auditor";
@@ -341,9 +333,10 @@ public class UserController {
             if (isBlank(school)) {
                 throw new IllegalArgumentException("School is required.");
             }
-            if (!ACADEMIC_SCHOOLS.contains(school)) {
+            if (!SchoolUtils.isValidSchool(school)) {
                 throw new IllegalArgumentException("Invalid academic school.");
             }
+            school = SchoolUtils.canonicalizeSchool(school);
             return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation, "user", "academic", null, null, null);
         }
 
