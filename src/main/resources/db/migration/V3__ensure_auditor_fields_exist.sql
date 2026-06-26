@@ -1,6 +1,5 @@
--- Add auditor support to users and submissions tables
+-- Safety net for Cloud SQL databases that were changed manually or have partial Flyway history.
 
--- User table additions
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS account_type VARCHAR(100);
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS category VARCHAR(100);
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auditor_type VARCHAR(100);
@@ -8,7 +7,6 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auditor_role VARCHAR(255);
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS post VARCHAR(255);
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS status VARCHAR(100) DEFAULT 'active';
 
--- Submission table additions for forwarding and auditor reviews
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS forwarded_to_auditor_id BIGINT;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS forwarded_to_auditor_name VARCHAR(255);
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS forwarded_to_auditor_email VARCHAR(255);
