@@ -60,7 +60,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createSnapshot(saved);
+        createDraftSnapshot(saved);
         return saved;
     }
 
@@ -84,7 +84,6 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createSnapshot(saved);
         return saved;
     }
 
@@ -111,7 +110,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createSnapshot(saved);
+        createDraftSnapshot(saved);
         return saved;
     }
 
@@ -146,7 +145,6 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createSnapshot(saved);
         return saved;
     }
 
@@ -165,6 +163,20 @@ public class SubmissionService {
                 .version(submission.getVersion())
                 .build();
         snapshotRepository.save(snapshot);
+    }
+
+    private void createDraftSnapshot(Submission submission) {
+        String status = submission.getStatus();
+        if (status == null) {
+            return;
+        }
+
+        String statusUpper = status.toUpperCase();
+        if (!List.of("DRAFT", "SENT_BACK").contains(statusUpper)) {
+            return;
+        }
+
+        createSnapshot(submission);
     }
 
     public boolean isAuditorAssigned(User auditor, Submission submission) {
@@ -468,7 +480,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createSnapshot(saved);
+        createDraftSnapshot(saved);
         return saved;
     }
 }
