@@ -37,13 +37,17 @@ public class SubmissionController {
     }
 
     @GetMapping("/my-draft")
-    public ResponseEntity<Submission> getMyDraft(@RequestParam String auditType) {
-        if (auditType == null || auditType.isBlank()) {
+    public ResponseEntity<Submission> getMyDraft(@RequestParam(required = false) String auditType) {
+        String email = getCurrentUserEmail();
+        Submission draft = submissionService.getOrCreateDraft(email, normalizeAuditType(auditType));
+        return ResponseEntity.ok(draft);
+    }
+
+    private String normalizeAuditType(String auditType) {
+        if (auditType == null || auditType.isBlank() || "null".equalsIgnoreCase(auditType.trim())) {
             throw new IllegalArgumentException("Audit type is required");
         }
-        String email = getCurrentUserEmail();
-        Submission draft = submissionService.getOrCreateDraft(email, auditType.trim().toLowerCase());
-        return ResponseEntity.ok(draft);
+        return auditType.trim().toLowerCase();
     }
 
     private void validateAuditTypeForRole(String role, String auditType) {
@@ -76,15 +80,13 @@ public class SubmissionController {
 
     @PostMapping("/save-draft")
     public ResponseEntity<Submission> saveDraft(@RequestBody FormSubmissionRequest request) {
-        if (request.getAuditType() == null) {
-            throw new IllegalArgumentException("Audit type is required");
-        }
+        String auditType = normalizeAuditType(request.getAuditType());
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
-        validateAuditTypeForRole(user.getRole(), request.getAuditType());
+        validateAuditTypeForRole(user.getRole(), auditType);
         Submission saved = submissionService.saveDraft(
                 email,
-                request.getAuditType().trim().toLowerCase(),
+                auditType,
                 user.getSchool(),
                 user.getName(),
                 request.getValuesData(),
@@ -96,15 +98,13 @@ public class SubmissionController {
 
     @PostMapping("/submit")
     public ResponseEntity<Submission> submitForm(@RequestBody FormSubmissionRequest request) {
-        if (request.getAuditType() == null) {
-            throw new IllegalArgumentException("Audit type is required");
-        }
+        String auditType = normalizeAuditType(request.getAuditType());
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
-        validateAuditTypeForRole(user.getRole(), request.getAuditType());
+        validateAuditTypeForRole(user.getRole(), auditType);
         Submission submitted = submissionService.submitForm(
                 email,
-                request.getAuditType().trim().toLowerCase(),
+                auditType,
                 user.getSchool(),
                 user.getName(),
                 request.getValuesData(),
@@ -135,6 +135,7 @@ public class SubmissionController {
                 user,
                 request.getStatus(),
                 request.getForwardedAuditorType(),
+                request.getForwardedAuditCategory(),
                 request.getForwardedToAuditorIds(),
                 request.getForwardedToAuditorNames(),
                 request.getForwardedToAuditorEmails(),

@@ -197,7 +197,11 @@ public class SubmissionService {
             return false;
         }
 
-        String auditType = submission.getAuditType();
+        String auditType = resolveAuditType(submission, null);
+        if (auditType == null || auditType.isBlank()) {
+            return false;
+        }
+
         String auditorCategory = auditor.getCategory();
         if (auditorCategory == null || !auditorCategory.equalsIgnoreCase(auditType)) {
             return false;
@@ -228,19 +232,24 @@ public class SubmissionService {
             return;
         }
         
-        String auditType = submission.getAuditType();
+        String auditType = resolveAuditType(submission, null);
+        if (auditType == null || auditType.isBlank()) {
+            throw new IllegalArgumentException("Audit type is required to forward submission to auditor");
+        }
+        final String forwardingAuditType = auditType;
+
         List<User> allAuditors = userRepository.findByAccountType("auditor");
         
         List<User> matchedAuditors = allAuditors.stream()
                 .filter(auditor -> {
-                    if (auditor.getCategory() == null || !auditor.getCategory().equalsIgnoreCase(auditType)) {
+                    if (auditor.getCategory() == null || !auditor.getCategory().equalsIgnoreCase(forwardingAuditType)) {
                         return false;
                     }
                     if (auditor.getAuditorType() == null || !auditor.getAuditorType().equalsIgnoreCase(forwardedAuditorType)) {
                         return false;
                     }
                     
-                    if ("academic".equalsIgnoreCase(auditType)) {
+                    if ("academic".equalsIgnoreCase(forwardingAuditType)) {
                         String subSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
                         String audSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
                         return audSchool != null && audSchool.equalsIgnoreCase(subSchool);
@@ -280,8 +289,41 @@ public class SubmissionService {
         }
         
         submission.setForwardedAuditorType(forwardedAuditorType);
-        submission.setForwardedAuditCategory(auditType);
+        submission.setForwardedAuditCategory(forwardingAuditType);
         submission.setForwardedAt(LocalDateTime.now());
+    }
+
+    private String resolveAuditType(Submission submission, String preferredAuditType) {
+        if (preferredAuditType != null && !preferredAuditType.isBlank() && !"null".equalsIgnoreCase(preferredAuditType.trim())) {
+            return preferredAuditType.trim().toLowerCase();
+        }
+        if (submission.getAuditType() != null && !submission.getAuditType().isBlank()) {
+            return submission.getAuditType().trim().toLowerCase();
+        }
+        if (submission.getForwardedAuditCategory() != null && !submission.getForwardedAuditCategory().isBlank()) {
+            return submission.getForwardedAuditCategory().trim().toLowerCase();
+        }
+
+        Optional<User> submitterOpt = userRepository.findByEmail(submission.getEmail());
+        if (submitterOpt.isPresent()) {
+            String submitterRole = submitterOpt.get().getRole();
+            if ("director".equalsIgnoreCase(submitterRole)) {
+                return "academic";
+            }
+            if ("administrative".equalsIgnoreCase(submitterRole)) {
+                return "administrative";
+            }
+        }
+
+        String school = submission.getSchool();
+        if (school != null && !school.isBlank()) {
+            if ("Administrative Office".equalsIgnoreCase(school.trim())) {
+                return "administrative";
+            }
+            return "academic";
+        }
+
+        return null;
     }
 
     private String injectAuditorSignOff(String valuesData, User auditor) {
@@ -338,6 +380,7 @@ public class SubmissionService {
 
     @Transactional
     public Submission updateSubmission(Long id, User caller, String status, String forwardedAuditorType,
+                                       String forwardedAuditCategory,
                                        List<Long> requestForwardedToAuditorIds,
                                        List<String> requestForwardedToAuditorNames,
                                        List<String> requestForwardedToAuditorEmails,
@@ -360,6 +403,13 @@ public class SubmissionService {
         String currentStatus = submission.getStatus().toUpperCase();
         if ("APPROVED".equals(currentStatus)) {
             throw new IllegalStateException("Cannot edit an approved submission");
+        }
+
+        if (submission.getAuditType() == null || submission.getAuditType().isBlank()) {
+            String resolvedAuditType = resolveAuditType(submission, forwardedAuditCategory);
+            if (resolvedAuditType != null && !resolvedAuditType.isBlank()) {
+                submission.setAuditType(resolvedAuditType);
+            }
         }
 
         if (isOwner && List.of("UNDER_REVIEW", "AUDITOR_COMPLETED").contains(currentStatus)) {
