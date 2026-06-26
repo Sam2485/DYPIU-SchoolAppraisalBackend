@@ -80,12 +80,12 @@ public class TableDataPromotionService {
     }
 
     @Transactional
-    public void promoteFinalSubmission(Submission submission) {
-        promoteTablesData(submission);
+    public void syncNormalizedTablesAndClearSnapshots(Submission submission) {
+        syncNormalizedTables(submission);
         snapshotRepository.deleteBySubmissionId(submission.getId());
     }
 
-    private void promoteTablesData(Submission submission) {
+    private void syncNormalizedTables(Submission submission) {
         String tablesData = submission.getTablesData();
         if (tablesData == null || tablesData.isBlank() || "{}".equals(tablesData.trim())) {
             return;
@@ -95,11 +95,11 @@ public class TableDataPromotionService {
         try {
             root = objectMapper.readTree(tablesData);
         } catch (Exception e) {
-            throw new IllegalStateException("Cannot finalize submission because tables data is invalid JSON", e);
+            throw new IllegalStateException("Cannot sync submission tables because tables data is invalid JSON", e);
         }
 
         if (!root.isObject()) {
-            throw new IllegalStateException("Cannot finalize submission because tables data must be a JSON object");
+            throw new IllegalStateException("Cannot sync submission tables because tables data must be a JSON object");
         }
 
         Iterator<Map.Entry<String, JsonNode>> fields = root.fields();

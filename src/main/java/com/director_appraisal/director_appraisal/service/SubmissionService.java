@@ -26,6 +26,7 @@ public class SubmissionService {
     private static final List<String> REVIEWER_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
     private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
     private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
 
     private final SubmissionRepository submissionRepository;
     private final SnapshotRepository snapshotRepository;
@@ -68,7 +69,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createDraftSnapshot(saved);
+        persistDataForStatus(saved);
         return saved;
     }
 
@@ -92,6 +93,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
+        persistDataForStatus(saved);
         return saved;
     }
 
@@ -118,7 +120,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        createDraftSnapshot(saved);
+        persistDataForStatus(saved);
         return saved;
     }
 
@@ -158,7 +160,7 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        promoteIfFinal(saved);
+        persistDataForStatus(saved);
         return saved;
     }
 
@@ -186,7 +188,7 @@ public class SubmissionService {
         }
 
         String statusUpper = status.toUpperCase();
-        if (!List.of("DRAFT", "SENT_BACK").contains(statusUpper)) {
+        if (!"DRAFT".equals(statusUpper)) {
             return;
         }
 
@@ -506,14 +508,20 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
-        promoteIfFinal(saved);
-        createDraftSnapshot(saved);
+        persistDataForStatus(saved);
         return saved;
     }
 
-    private void promoteIfFinal(Submission submission) {
-        if (STATUS_FINAL.equalsIgnoreCase(submission.getStatus())) {
-            tableDataPromotionService.promoteFinalSubmission(submission);
+    private void persistDataForStatus(Submission submission) {
+        if (usesNormalizedTables(submission.getStatus())) {
+            tableDataPromotionService.syncNormalizedTablesAndClearSnapshots(submission);
+            return;
         }
+
+        createDraftSnapshot(submission);
+    }
+
+    private boolean usesNormalizedTables(String status) {
+        return status != null && NORMALIZED_TABLE_STATUSES.contains(status.toUpperCase());
     }
 }
