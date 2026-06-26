@@ -11,7 +11,6 @@ public class SchoolUtils {
             "socm",
             "sobb",
             "somcs",
-            "somcs",
             "sod",
             "soaa",
             "soce",
