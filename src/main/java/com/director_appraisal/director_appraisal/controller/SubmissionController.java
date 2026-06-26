@@ -169,7 +169,7 @@ public class SubmissionController {
         boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
         if (isVc) {
-            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED").contains(submission.getStatus().toUpperCase());
+            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED", "FINAL").contains(submission.getStatus().toUpperCase());
             if (!statusAllowed) {
                 return ResponseEntity.status(403).build();
             }
@@ -212,7 +212,7 @@ public class SubmissionController {
         boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
         if (isVc) {
-            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED").contains(submission.getStatus().toUpperCase());
+            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED", "FINAL").contains(submission.getStatus().toUpperCase());
             if (!statusAllowed) {
                 return ResponseEntity.status(403).build();
             }
@@ -242,7 +242,7 @@ public class SubmissionController {
 
     @Data
     public static class ReviewRequest {
-        private String status; // APPROVED, SENT_BACK, UNDER_REVIEW
+        private String status; // APPROVED/FINAL, SENT_BACK, UNDER_REVIEW
         private String remarks;
     }
 }

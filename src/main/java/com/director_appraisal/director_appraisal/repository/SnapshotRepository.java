@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface SnapshotRepository extends JpaRepository<Snapshot, Long> {
     List<Snapshot> findBySubmissionIdOrderByVersionDesc(Long submissionId);
+    void deleteBySubmissionId(Long submissionId);
 }

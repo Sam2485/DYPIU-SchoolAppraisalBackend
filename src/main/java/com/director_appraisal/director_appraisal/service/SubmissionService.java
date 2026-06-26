@@ -20,9 +20,17 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SubmissionService {
 
+    private static final String STATUS_APPROVED_LEGACY = "APPROVED";
+    private static final String STATUS_FINAL = "FINAL";
+    private static final List<String> LOCKED_STATUSES = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> REVIEWER_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
+    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
+    private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+
     private final SubmissionRepository submissionRepository;
     private final SnapshotRepository snapshotRepository;
     private final UserRepository userRepository;
+    private final TableDataPromotionService tableDataPromotionService;
 
     @Transactional
     public Submission getOrCreateDraft(String email, String auditType) {
@@ -48,7 +56,7 @@ public class SubmissionService {
         
         // Updates can only occur before final approval or during draft/submitted/sent-back status
         String statusUpper = submission.getStatus().toUpperCase();
-        if (List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED").contains(statusUpper)) {
+        if (LOCKED_STATUSES.contains(statusUpper)) {
             throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
@@ -70,7 +78,7 @@ public class SubmissionService {
         Submission submission = getOrCreateDraft(email, auditType);
 
         String statusUpper = submission.getStatus().toUpperCase();
-        if (List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED").contains(statusUpper)) {
+        if (LOCKED_STATUSES.contains(statusUpper)) {
             throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
@@ -98,7 +106,7 @@ public class SubmissionService {
         }
 
         String statusUpper = submission.getStatus().toUpperCase();
-        if (List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED").contains(statusUpper)) {
+        if (LOCKED_STATUSES.contains(statusUpper)) {
             throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
@@ -115,8 +123,8 @@ public class SubmissionService {
     }
 
     public List<Submission> getSubmissionsForReviewer() {
-        // VC & IQAC only view submitted, under-review, approved, and sent-back forms
-        return submissionRepository.findByStatusIn(List.of("SUBMITTED", "UNDER_REVIEW", "APPROVED", "SENT_BACK"));
+        // VC & IQAC only view submitted/review/finalized forms.
+        return submissionRepository.findByStatusIn(REVIEWER_VISIBLE_STATUSES);
     }
 
     public Optional<Submission> getSubmissionById(Long id) {
@@ -128,23 +136,29 @@ public class SubmissionService {
         Submission submission = submissionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
 
-        if (!List.of("APPROVED", "SENT_BACK", "UNDER_REVIEW").contains(status.toUpperCase())) {
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Review status is required");
+        }
+
+        String requestedStatus = status.toUpperCase();
+        if (!List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK", "UNDER_REVIEW").contains(requestedStatus)) {
             throw new IllegalArgumentException("Invalid review status: " + status);
         }
 
-        if (List.of("APPROVED", "SENT_BACK").contains(status.toUpperCase())) {
+        if (List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK").contains(requestedStatus)) {
             if (!"AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())) {
                 throw new IllegalStateException("Form can only be approved or sent back after the audit has been completed by an auditor");
             }
         }
 
-        submission.setStatus(status.toUpperCase());
+        submission.setStatus(isApprovalStatus(requestedStatus) ? STATUS_FINAL : requestedStatus);
         submission.setRemarks(remarks);
         submission.setReviewedBy(reviewerName);
         submission.setReviewedAt(LocalDateTime.now());
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
+        promoteIfFinal(saved);
         return saved;
     }
 
@@ -177,6 +191,10 @@ public class SubmissionService {
         }
 
         createSnapshot(submission);
+    }
+
+    private boolean isApprovalStatus(String status) {
+        return STATUS_APPROVED_LEGACY.equals(status) || STATUS_FINAL.equals(status);
     }
 
     public boolean isAuditorAssigned(User auditor, Submission submission) {
@@ -371,9 +389,9 @@ public class SubmissionService {
         String role = user.getRole().toLowerCase();
 
         if ("iqac".equals(role)) {
-            return submissionRepository.findByStatusIn(List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED", "SENT_BACK"));
+            return submissionRepository.findByStatusIn(IQAC_VISIBLE_STATUSES);
         } else if ("vice-chancellor".equals(role)) {
-            return submissionRepository.findByStatusIn(List.of("AUDITOR_COMPLETED", "APPROVED"));
+            return submissionRepository.findByStatusIn(VC_VISIBLE_STATUSES);
         } else if (role.contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType())) {
             List<Submission> allSubmissions = submissionRepository.findAll();
             return allSubmissions.stream()
@@ -413,8 +431,8 @@ public class SubmissionService {
         }
 
         String currentStatus = submission.getStatus().toUpperCase();
-        if ("APPROVED".equals(currentStatus)) {
-            throw new IllegalStateException("Cannot edit an approved submission");
+        if (isApprovalStatus(currentStatus)) {
+            throw new IllegalStateException("Cannot edit a final submission");
         }
 
         if (submission.getAuditType() == null || submission.getAuditType().isBlank()) {
@@ -449,6 +467,14 @@ public class SubmissionService {
                 submission.setStatus("SUBMITTED");
             } else if (upperStatus.equals("DRAFT")) {
                 submission.setStatus("DRAFT");
+            } else if (isApprovalStatus(upperStatus)) {
+                if (!isIqac) {
+                    throw new IllegalStateException("Only IQAC can mark submissions as final");
+                }
+                if (!"AUDITOR_COMPLETED".equals(currentStatus)) {
+                    throw new IllegalStateException("Form can only be finalized after the audit has been completed by an auditor");
+                }
+                submission.setStatus(STATUS_FINAL);
             }
         }
 
@@ -480,7 +506,14 @@ public class SubmissionService {
         submission.setVersion(submission.getVersion() + 1);
 
         Submission saved = submissionRepository.save(submission);
+        promoteIfFinal(saved);
         createDraftSnapshot(saved);
         return saved;
+    }
+
+    private void promoteIfFinal(Submission submission) {
+        if (STATUS_FINAL.equalsIgnoreCase(submission.getStatus())) {
+            tableDataPromotionService.promoteFinalSubmission(submission);
+        }
     }
 }

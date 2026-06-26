@@ -31,7 +31,7 @@ public class Submission {
     private LocalDateTime submittedAt;
 
     @Column(nullable = false)
-    private String status; // DRAFT, SUBMITTED, UNDER_REVIEW, APPROVED, SENT_BACK
+    private String status; // DRAFT, SUBMITTED, UNDER_REVIEW, AUDITOR_COMPLETED, FINAL, SENT_BACK
 
     @Column(columnDefinition = "TEXT")
     private String remarks;
