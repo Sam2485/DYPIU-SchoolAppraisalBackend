@@ -38,12 +38,18 @@ public class SubmissionController {
 
     @GetMapping("/my-draft")
     public ResponseEntity<Submission> getMyDraft(@RequestParam String auditType) {
+        if (auditType == null || auditType.isBlank()) {
+            throw new IllegalArgumentException("Audit type is required");
+        }
         String email = getCurrentUserEmail();
         Submission draft = submissionService.getOrCreateDraft(email, auditType.trim().toLowerCase());
         return ResponseEntity.ok(draft);
     }
 
     private void validateAuditTypeForRole(String role, String auditType) {
+        if (auditType == null) {
+            return;
+        }
         String roleLower = role.toLowerCase();
         String typeLower = auditType.trim().toLowerCase();
         
@@ -70,6 +76,9 @@ public class SubmissionController {
 
     @PostMapping("/save-draft")
     public ResponseEntity<Submission> saveDraft(@RequestBody FormSubmissionRequest request) {
+        if (request.getAuditType() == null) {
+            throw new IllegalArgumentException("Audit type is required");
+        }
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         validateAuditTypeForRole(user.getRole(), request.getAuditType());
@@ -87,6 +96,9 @@ public class SubmissionController {
 
     @PostMapping("/submit")
     public ResponseEntity<Submission> submitForm(@RequestBody FormSubmissionRequest request) {
+        if (request.getAuditType() == null) {
+            throw new IllegalArgumentException("Audit type is required");
+        }
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         validateAuditTypeForRole(user.getRole(), request.getAuditType());
@@ -115,7 +127,9 @@ public class SubmissionController {
     @PutMapping("/{id}")
     public ResponseEntity<Submission> updateSubmission(@PathVariable Long id, @RequestBody FormSubmissionRequest request) {
         User user = getCurrentUserDetails();
-        validateAuditTypeForRole(user.getRole(), request.getAuditType());
+        if (request.getAuditType() != null && !List.of("vice-chancellor", "iqac").contains(user.getRole().toLowerCase())) {
+            validateAuditTypeForRole(user.getRole(), request.getAuditType());
+        }
         Submission updated = submissionService.updateSubmission(
                 id,
                 user,
