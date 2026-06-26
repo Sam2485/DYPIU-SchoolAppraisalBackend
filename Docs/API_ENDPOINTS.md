@@ -26,7 +26,14 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
     "name": "Director of Schools",
     "designation": "Director",
     "school": "School of Computer Science Engg. & App.",
-    "role": "director"
+    "role": "director",
+    "id": 2,
+    "userId": 2,
+    "accountType": "user",
+    "category": "academic",
+    "auditorType": null,
+    "auditorRole": null,
+    "post": null
   }
   ```
 
@@ -114,25 +121,54 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
 - **Request Body**: Same as Save Draft.
 - **Response (200 OK)**: Updated submission object with status `SUBMITTED`.
 
-### Get All Submissions (Reviewers only)
+### Get All Submissions
 - **URL**: `/all`
 - **Method**: `GET`
-- **Authorization**: Authorized for `ROLE_VICE-CHANCELLOR` and `ROLE_IQAC` roles.
-- **Response (200 OK)**: List of all submitted/reviewed forms.
+- **Authorization**: Authorized for `ROLE_VICE-CHANCELLOR`, `ROLE_IQAC`, and all `auditor` roles.
+- **Filtering Logic**:
+  - **IQAC**: returns submitted, under review, auditor completed, and approved/sent-back forms.
+  - **VC**: returns only `AUDITOR_COMPLETED` and `APPROVED` forms (blocked before audit completion).
+  - **Auditors**: returns only forms where the auditor is explicitly assigned (listed in `forwardedToAuditorIds`/`forwardedToAuditorEmails`) or fallback matched (category, auditorType, and school/post match) with status `UNDER_REVIEW` or `AUDITOR_COMPLETED`.
+- **Response (200 OK)**: List of submission objects.
 
 ### Get / Update Submission by ID
 - **URL**: `/{id}`
 - **Method**: `GET` | `PUT`
-- **Request Body (For PUT)**: Same as Save Draft.
-- **Response (200 OK)**: Submission details or updated submission object if owner (or reviewer for GET).
+- **Access Limits**:
+  - Owners can read/write drafts.
+  - IQAC can read/write and configure forwarding.
+  - VC can read only after `AUDITOR_COMPLETED`.
+  - Auditors can read only if assigned/matched.
+  - Auditors can write/update only Part E (academic) or Part F (administrative) fields and set status to `AUDITOR_COMPLETED`.
+- **Request Body (For PUT forwarding by IQAC)**:
+  ```json
+  {
+    "forwardedAuditorType": "internal", // "internal" | "external"
+    "status": "UNDER_REVIEW",
+    "forwardedToAuditorIds": [4, 5], // array of auditor user IDs (optional)
+    "forwardedToAuditorNames": ["Auditor A", "Auditor B"], // (optional)
+    "forwardedToAuditorEmails": ["auditor.a@dypiu.ac.in", "auditor.b@dypiu.ac.in"] // (optional)
+  }
+  ```
+- **Request Body (For PUT completion by Auditor)**:
+  ```json
+  {
+    "status": "AUDITOR_COMPLETED",
+    "valuesData": "{\"__auditSignOff\":{\"auditedBy\":{...}}, ...}",
+    "tablesData": "...",
+    "attachments": "..."
+  }
+  ```
+- **Response (200 OK)**: Updated submission object.
 
 ### Review Submission (Reviewers only)
 - **URL**: `/{id}/review`
 - **Method**: `POST`
+- **Access Rule**: Blocked unless submission status is already `AUDITOR_COMPLETED`.
 - **Request Body**:
   ```json
   {
-    "status": "APPROVED", // APPROVED, SENT_BACK, UNDER_REVIEW
+    "status": "APPROVED", // APPROVED, SENT_BACK
     "remarks": "Form review passed. Checked records."
   }
   ```
@@ -246,17 +282,30 @@ This module provides full CRUD capabilities over user profiles. Access is restri
 ### Create User
 - **URL**: `/`
 - **Method**: `POST`
-- **Request Body**:
+- **Request Body (For Standard Users)**:
   ```json
   {
     "category": "academic", // "academic" or "administrative"
-    "role": "director",      // must match category ("director" for academic, "administrative" for administrative)
-    "school": "School of Computer Science & Applications", // Selected School (or "Administrative Office" for admin category)
-    "designation": "Director", // Optional custom designation (if empty, matches defaults/posts)
-    "post": null, // Required if category is "administrative": "registrar", "hr", "dean-student-welfare", "dean-placement"
+    "role": "director",      // must match category
+    "school": "School of Computer Science & Applications",
+    "designation": "Director",
     "name": "Full Name",
     "email": "user@dypiu.ac.in",
-    "password": "Password123" // Minimum 6 characters
+    "password": "Password123"
+  }
+  ```
+- **Request Body (For Auditors)**:
+  ```json
+  {
+    "accountType": "auditor", // or "userType": "auditor"
+    "category": "academic", // or "auditCategory" ("academic" | "administrative")
+    "auditorType": "internal", // "internal" | "external"
+    "auditorRole": "academic-internal-auditor", // specific auditor role
+    "school": "School of Computer Science & Applications", // required for academic auditors
+    "post": null, // required for administrative auditors (e.g. "registrar", "hr", "dean-student-welfare", "dean-placement")
+    "name": "Auditor Name",
+    "email": "auditor@dypiu.ac.in",
+    "password": "Password123"
   }
   ```
 - **Response (201 Created)**:
@@ -265,13 +314,16 @@ This module provides full CRUD capabilities over user profiles. Access is restri
     "message": "User created successfully",
     "user": {
       "id": 4,
-      "name": "Full Name",
-      "email": "user@dypiu.ac.in",
+      "name": "Auditor Name",
+      "email": "auditor@dypiu.ac.in",
       "category": "academic",
-      "role": "director",
+      "role": "academic-internal-auditor",
       "school": "School of Computer Science & Applications",
-      "designation": "Director",
+      "designation": "Internal Academic Auditor",
       "post": null,
+      "accountType": "auditor",
+      "auditorType": "internal",
+      "auditorRole": "academic-internal-auditor",
       "status": "active"
     }
   }

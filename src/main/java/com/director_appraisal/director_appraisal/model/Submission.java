@@ -39,6 +39,30 @@ public class Submission {
     private String reviewedBy;
     private LocalDateTime reviewedAt;
 
+    // Legacy singular auditor fields
+    private Long forwardedToAuditorId;
+    private String forwardedToAuditorName;
+    private String forwardedToAuditorEmail;
+
+    // Plural auditor fields (storing JSON arrays of IDs, names, emails)
+    @Column(columnDefinition = "TEXT")
+    private String forwardedToAuditorIds;
+    @Column(columnDefinition = "TEXT")
+    private String forwardedToAuditorNames;
+    @Column(columnDefinition = "TEXT")
+    private String forwardedToAuditorEmails;
+
+    // Forwarding details
+    private String forwardedAuditorType; // internal | external
+    private String forwardedAuditCategory; // academic | administrative
+    private LocalDateTime forwardedAt;
+
+    // Auditor review stamps
+    private String auditorReviewedBy;
+    private String auditorReviewedByDesignation;
+    private String auditorReviewedByRole;
+    private LocalDateTime auditorReviewedOn;
+
     @Column(columnDefinition = "TEXT")
     private String valuesData; // JSON string of field values
 

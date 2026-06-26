@@ -45,7 +45,14 @@ public class AuthController {
                 user.getName(),
                 user.getDesignation(),
                 user.getSchool(),
-                user.getRole()
+                user.getRole(),
+                user.getId(),
+                user.getId(),
+                user.getAccountType(),
+                user.getCategory(),
+                user.getAuditorType(),
+                user.getAuditorRole(),
+                user.getPost()
         ));
     }
 
@@ -102,5 +109,12 @@ public class AuthController {
         private final String designation;
         private final String school;
         private final String role;
+        private final Long id;
+        private final Long userId;
+        private final String accountType;
+        private final String category;
+        private final String auditorType;
+        private final String auditorRole;
+        private final String post;
     }
 }

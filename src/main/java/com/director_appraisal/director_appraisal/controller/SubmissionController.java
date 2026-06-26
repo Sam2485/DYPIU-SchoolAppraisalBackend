@@ -47,6 +47,16 @@ public class SubmissionController {
         String roleLower = role.toLowerCase();
         String typeLower = auditType.trim().toLowerCase();
         
+        if (roleLower.contains("auditor")) {
+            if (roleLower.contains("academic") && !"academic".equals(typeLower)) {
+                throw new IllegalArgumentException("Academic auditors can only audit academic forms");
+            }
+            if (roleLower.contains("administrative") && !"administrative".equals(typeLower)) {
+                throw new IllegalArgumentException("Administrative auditors can only audit administrative forms");
+            }
+            return;
+        }
+
         if ("director".equals(roleLower) && !"academic".equals(typeLower)) {
             throw new IllegalArgumentException("Academic Directors can only submit academic audits");
         }
@@ -104,14 +114,16 @@ public class SubmissionController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Submission> updateSubmission(@PathVariable Long id, @RequestBody FormSubmissionRequest request) {
-        String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         validateAuditTypeForRole(user.getRole(), request.getAuditType());
-        Submission updated = submissionService.updateSubmissionById(
+        Submission updated = submissionService.updateSubmission(
                 id,
-                email,
-                user.getSchool(),
-                user.getName(),
+                user,
+                request.getStatus(),
+                request.getForwardedAuditorType(),
+                request.getForwardedToAuditorIds(),
+                request.getForwardedToAuditorNames(),
+                request.getForwardedToAuditorEmails(),
                 request.getValuesData(),
                 request.getTablesData(),
                 request.getAttachments()
@@ -120,25 +132,35 @@ public class SubmissionController {
     }
 
     @GetMapping("/all")
-    @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")
+    @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC', 'ROLE_ACADEMIC-INTERNAL-AUDITOR', 'ROLE_ACADEMIC-EXTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-INTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-EXTERNAL-AUDITOR')")
     public ResponseEntity<List<Submission>> getAllSubmissions() {
-        List<Submission> submissions = submissionService.getSubmissionsForReviewer();
+        User user = getCurrentUserDetails();
+        List<Submission> submissions = submissionService.getAllSubmissionsForUser(user);
         return ResponseEntity.ok(submissions);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Submission> getSubmissionById(@PathVariable Long id) {
-        // Anyone authenticated can view a form by ID (VC/IQAC to review, or owner)
-        // Wait, for basic security we can check if caller is owner or is reviewer
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         Submission submission = submissionService.getSubmissionById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
 
         boolean isOwner = submission.getEmail().equalsIgnoreCase(email);
-        boolean isReviewer = List.of("vice-chancellor", "iqac").contains(user.getRole().toLowerCase());
+        boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
+        boolean isVc = "vice-chancellor".equalsIgnoreCase(user.getRole());
+        boolean isAuditor = user.getRole().toLowerCase().contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType());
+        
+        boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
-        if (!isOwner && !isReviewer) {
+        if (isVc) {
+            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED", "SENT_BACK").contains(submission.getStatus().toUpperCase());
+            if (!statusAllowed) {
+                return ResponseEntity.status(403).build();
+            }
+        }
+
+        if (!isOwner && !isIqac && !isVc && !isAssignedAuditor) {
             return ResponseEntity.status(403).build();
         }
 
@@ -168,9 +190,20 @@ public class SubmissionController {
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
 
         boolean isOwner = submission.getEmail().equalsIgnoreCase(email);
-        boolean isReviewer = List.of("vice-chancellor", "iqac").contains(user.getRole().toLowerCase());
+        boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
+        boolean isVc = "vice-chancellor".equalsIgnoreCase(user.getRole());
+        boolean isAuditor = user.getRole().toLowerCase().contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType());
+        
+        boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
-        if (!isOwner && !isReviewer) {
+        if (isVc) {
+            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED", "SENT_BACK").contains(submission.getStatus().toUpperCase());
+            if (!statusAllowed) {
+                return ResponseEntity.status(403).build();
+            }
+        }
+
+        if (!isOwner && !isIqac && !isVc && !isAssignedAuditor) {
             return ResponseEntity.status(403).build();
         }
 
@@ -184,6 +217,12 @@ public class SubmissionController {
         private String valuesData;
         private String tablesData;
         private String attachments;
+        private String status;
+        private String forwardedAuditorType;
+        private String forwardedAuditCategory;
+        private List<Long> forwardedToAuditorIds;
+        private List<String> forwardedToAuditorNames;
+        private List<String> forwardedToAuditorEmails;
     }
 
     @Data

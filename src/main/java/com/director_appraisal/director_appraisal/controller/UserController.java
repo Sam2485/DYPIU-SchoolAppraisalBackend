@@ -82,6 +82,11 @@ public class UserController {
                     .role(validatedUser.role)
                     .school(validatedUser.school)
                     .designation(validatedUser.designation)
+                    .accountType(validatedUser.accountType)
+                    .category(validatedUser.category)
+                    .auditorType(validatedUser.auditorType)
+                    .auditorRole(validatedUser.auditorRole)
+                    .post(validatedUser.post)
                     .build());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
@@ -164,6 +169,11 @@ public class UserController {
             user.setRole(validatedUser.role);
             user.setSchool(validatedUser.school);
             user.setDesignation(validatedUser.designation);
+            user.setAccountType(validatedUser.accountType);
+            user.setCategory(validatedUser.category);
+            user.setAuditorType(validatedUser.auditorType);
+            user.setAuditorRole(validatedUser.auditorRole);
+            user.setPost(validatedUser.post);
 
             User savedUser = userService.updateUser(user, validatedUser.password);
             return ResponseEntity.ok(Map.of(
@@ -229,7 +239,18 @@ public class UserController {
         String name = clean(request.getName());
         String email = normalize(request.getEmail());
         String password = request.getPassword();
-        String category = normalize(request.getCategory());
+        
+        String reqAccountType = request.getAccountType() != null ? request.getAccountType() : request.getUserType();
+        String accountType = normalize(reqAccountType);
+        
+        String reqCategory = request.getCategory() != null ? request.getCategory() : request.getAuditCategory();
+        String category = normalize(reqCategory);
+        
+        String auditorType = normalize(request.getAuditorType());
+        
+        String reqAuditorRole = request.getAuditorRole() != null ? request.getAuditorRole() : request.getRole();
+        String auditorRole = normalize(reqAuditorRole);
+        
         String role = normalize(request.getRole());
         String school = clean(request.getSchool());
         String designation = clean(request.getDesignation());
@@ -250,6 +271,65 @@ public class UserController {
         if (!isBlank(password) && password.length() < 6) {
             throw new IllegalArgumentException("Password must be at least 6 characters.");
         }
+
+        boolean isAuditor = "auditor".equals(accountType) || (auditorRole != null && auditorRole.contains("auditor")) || (role != null && role.contains("auditor"));
+
+        if (isAuditor) {
+            accountType = "auditor";
+            
+            if (isBlank(category)) {
+                if (auditorRole != null && auditorRole.contains("academic")) {
+                    category = "academic";
+                } else if (auditorRole != null && auditorRole.contains("administrative")) {
+                    category = "administrative";
+                } else {
+                    throw new IllegalArgumentException("Category (academic/administrative) is required for auditors.");
+                }
+            }
+            
+            if (isBlank(auditorType)) {
+                if (auditorRole != null && auditorRole.contains("external")) {
+                    auditorType = "external";
+                } else {
+                    auditorType = "internal";
+                }
+            }
+            
+            if (isBlank(auditorRole)) {
+                auditorRole = category + "-" + auditorType + "-auditor";
+            }
+            role = auditorRole;
+            
+            if ("academic".equals(category)) {
+                if (isBlank(school)) {
+                    throw new IllegalArgumentException("School is required for academic auditors.");
+                }
+                if (!ACADEMIC_SCHOOLS.contains(school)) {
+                    throw new IllegalArgumentException("Invalid academic school.");
+                }
+                post = null;
+                if (isBlank(designation)) {
+                    designation = (auditorType.substring(0, 1).toUpperCase() + auditorType.substring(1)) + " Academic Auditor";
+                }
+            } else if ("administrative".equals(category)) {
+                school = ADMINISTRATIVE_OFFICE;
+                if (isBlank(post)) {
+                    throw new IllegalArgumentException("Post is required for administrative auditors.");
+                }
+                String mappedDesignation = ADMINISTRATIVE_POSTS.get(post);
+                if (mappedDesignation == null) {
+                    throw new IllegalArgumentException("Invalid administrative post.");
+                }
+                if (isBlank(designation)) {
+                    designation = (auditorType.substring(0, 1).toUpperCase() + auditorType.substring(1)) + " " + mappedDesignation + " Auditor";
+                }
+            } else {
+                throw new IllegalArgumentException("Invalid category for auditor.");
+            }
+            
+            return new ValidatedUser(name, email, cleanPassword(password), role, school, designation, accountType, category, auditorType, auditorRole, post);
+        }
+
         if (isBlank(category)) {
             throw new IllegalArgumentException("Category is required.");
         }
@@ -264,7 +344,7 @@ public class UserController {
             if (!ACADEMIC_SCHOOLS.contains(school)) {
                 throw new IllegalArgumentException("Invalid academic school.");
             }
-            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation);
+            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation, "user", "academic", null, null, null);
         }
 
         if ("administrative".equals(category)) {
@@ -287,7 +367,7 @@ public class UserController {
             if (!isBlank(designation) && !mappedDesignation.equals(designation)) {
                 throw new IllegalArgumentException("Designation must match selected administrative post.");
             }
-            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation);
+            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation, "user", "administrative", null, null, post);
         }
 
         throw new IllegalArgumentException("Invalid category.");
@@ -295,12 +375,31 @@ public class UserController {
 
     private boolean isManagedUser(User user) {
         String role = normalize(user.getRole());
-        return "director".equals(role) || "administrative".equals(role);
+        String accountType = normalize(user.getAccountType());
+        return "director".equals(role) || "administrative".equals(role) || "auditor".equals(accountType) || (role != null && role.contains("auditor"));
     }
 
     private Map<String, Object> toUserResponse(User user) {
         String role = normalize(user.getRole());
-        String category = "director".equals(role) ? "academic" : "administrative";
+        String accountType = normalize(user.getAccountType());
+        if (isBlank(accountType)) {
+            accountType = (role != null && role.contains("auditor")) ? "auditor" : "user";
+        }
+        
+        String category = user.getCategory();
+        if (isBlank(category)) {
+            if ("director".equals(role)) {
+                category = "academic";
+            } else if ("administrative".equals(role)) {
+                category = "administrative";
+            } else if (role != null && role.contains("academic")) {
+                category = "academic";
+            } else if (role != null && role.contains("administrative")) {
+                category = "administrative";
+            } else {
+                category = "";
+            }
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", user.getId());
@@ -310,8 +409,12 @@ public class UserController {
         response.put("role", role);
         response.put("school", user.getSchool());
         response.put("designation", user.getDesignation());
-        response.put("post", "administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null);
-        response.put("status", "active");
+        response.put("post", user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null));
+        
+        response.put("accountType", accountType);
+        response.put("auditorType", user.getAuditorType());
+        response.put("auditorRole", user.getAuditorRole());
+        response.put("status", user.getStatus() != null ? user.getStatus() : "active");
         return response;
     }
 
@@ -355,8 +458,10 @@ public class UserController {
         return value == null || value.isBlank();
     }
 
-    private record ValidatedUser(String name, String email, String password, String role, String school, String designation) {
-    }
+    private record ValidatedUser(
+        String name, String email, String password, String role, String school, String designation,
+        String accountType, String category, String auditorType, String auditorRole, String post
+    ) {}
 
     @Data
     public static class CreateUserRequest {
@@ -368,5 +473,10 @@ public class UserController {
         private String name;
         private String email;
         private String password;
+        private String accountType;
+        private String userType;
+        private String auditCategory;
+        private String auditorType;
+        private String auditorRole;
     }
 }

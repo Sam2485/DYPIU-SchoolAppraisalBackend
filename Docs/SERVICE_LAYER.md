@@ -32,8 +32,14 @@ Implements the core appraisal form lifecycle, draft management, and version/hist
 - `getOrCreateDraft(String email, String auditType)`: Retrieves the currently active draft for the submitter. If none exists, builds and saves a new blank submission record with status `DRAFT`.
 - `saveDraft(String email, ...)`: Updates draft values, increments the document version counter, and triggers `createSnapshot`. Throws an error if the form has already been `APPROVED`.
 - `submitForm(String email, ...)`: Updates values, overrides status to `SUBMITTED`, logs the `submittedAt` timestamp, increments the version counter, and triggers `createSnapshot`.
-- `updateSubmissionById(Long id, ...)`: Updates submission values by ID. Validates that the caller is the owner and that the submission is not already `APPROVED`.
-- `reviewSubmission(Long id, String status, String remarks, String reviewerName)`: Invoked by VC/IQAC reviewers to set the final status (`APPROVED`, `SENT_BACK`, `UNDER_REVIEW`), logs reviewer remarks, and triggers `createSnapshot`.
+- `updateSubmission(Long id, User caller, String status, String forwardedAuditorType, ...)`: Performs updates on submissions. Validates caller authorizations (supports Owner, IQAC, and Assigned/Matched Auditors). Handles forwarding assignments, stamps auditor review details upon status changing to `AUDITOR_COMPLETED`, and triggers `createSnapshot`.
+- `populateForwardingAuditors(Submission submission, String forwardedAuditorType)`: Automatically queries the database to find all matching auditor users based on `forwardedAuditorType` and target categories (school for academic audits, submitter's post for administrative audits), then serializes their IDs, names, and emails as JSON arrays into the plural fields (and defaults the legacy singular fields).
+- `injectAuditorSignOff(String valuesData, User auditor)`: Parses the custom form data, injects the auditor's name, designation, role, and current timestamp into `__auditSignOff.auditedBy`, and re-serializes the values JSON payload.
+- `getAllSubmissionsForUser(User user)`: Filters and returns submissions list depending on the user's role:
+  - **IQAC**: returns submitted, under review, auditor completed, approved/sent-back forms.
+  - **VC**: returns only auditor completed and approved forms.
+  - **Auditors**: returns forms where the auditor is directly assigned or fallback matched (status must be `UNDER_REVIEW` or `AUDITOR_COMPLETED`).
+- `reviewSubmission(Long id, String status, String remarks, String reviewerName)`: Invoked by VC/IQAC reviewers to set the final status (`APPROVED`, `SENT_BACK`, `UNDER_REVIEW`), logs reviewer remarks, and triggers `createSnapshot`. Blocks approvals or sending back unless status is already `AUDITOR_COMPLETED`.
 - `getSnapshotsForSubmission(Long submissionId)`: Retrieves historical snapshots, ordered from newest to oldest.
 - `createSnapshot(Submission submission)`: Prepares and writes a historical record to the `snapshots` table every time the submission state is saved, submitted, or reviewed.
 
