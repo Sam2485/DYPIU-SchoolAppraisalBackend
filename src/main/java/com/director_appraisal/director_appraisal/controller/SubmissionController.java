@@ -1,6 +1,5 @@
 package com.director_appraisal.director_appraisal.controller;
 
-import com.director_appraisal.director_appraisal.model.Snapshot;
 import com.director_appraisal.director_appraisal.model.Submission;
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.service.SubmissionService;
@@ -192,13 +191,36 @@ public class SubmissionController {
                 id,
                 request.getStatus(),
                 request.getRemarks(),
-                reviewer.getName()
+                request.getReportCategory(),
+                request.getAuditCycle(),
+                request.getVersion(),
+                request.getValuesData(),
+                request.getTablesData(),
+                request.getAttachments(),
+                reviewer
         );
         return ResponseEntity.ok(updated);
     }
 
+    @PostMapping("/{id}/next-cycle")
+    @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")
+    public ResponseEntity<Submission> createNextCycle(
+            @PathVariable Long id,
+            @RequestBody NextCycleRequest request) {
+        User caller = getCurrentUserDetails();
+        Submission nextSubmission = submissionService.createNextCycle(
+                id,
+                caller,
+                request.isPreserveApprovedVersion(),
+                request.getPreviousApprovedSubmissionId(),
+                request.getNextVersion(),
+                request.getNextAuditorType()
+        );
+        return ResponseEntity.ok(nextSubmission);
+    }
+
     @GetMapping("/{id}/snapshots")
-    public ResponseEntity<List<Snapshot>> getSnapshots(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getSnapshots(@PathVariable Long id) {
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         Submission submission = submissionService.getSubmissionById(id)
@@ -211,19 +233,11 @@ public class SubmissionController {
         
         boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
-        if (isVc) {
-            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED", "FINAL").contains(submission.getStatus().toUpperCase());
-            if (!statusAllowed) {
-                return ResponseEntity.status(403).build();
-            }
-        }
-
         if (!isOwner && !isIqac && !isVc && !isAssignedAuditor) {
             return ResponseEntity.status(403).build();
         }
 
-        List<Snapshot> snapshots = submissionService.getSnapshotsForSubmission(id);
-        return ResponseEntity.ok(snapshots);
+        return ResponseEntity.ok(Map.of("data", submissionService.getVersionHistoryForSubmission(id)));
     }
 
     @Data
@@ -244,5 +258,19 @@ public class SubmissionController {
     public static class ReviewRequest {
         private String status; // APPROVED/FINAL, SENT_BACK, UNDER_REVIEW
         private String remarks;
+        private String reportCategory;
+        private String auditCycle;
+        private Integer version;
+        private String valuesData;
+        private String tablesData;
+        private String attachments;
+    }
+
+    @Data
+    public static class NextCycleRequest {
+        private boolean preserveApprovedVersion = true;
+        private Long previousApprovedSubmissionId;
+        private Integer nextVersion;
+        private String nextAuditorType;
     }
 }

@@ -31,7 +31,7 @@ public class Submission {
     private LocalDateTime submittedAt;
 
     @Column(nullable = false)
-    private String status; // DRAFT, SUBMITTED, UNDER_REVIEW, AUDITOR_COMPLETED, FINAL, SENT_BACK
+    private String status; // DRAFT, SUBMITTED, UNDER_REVIEW, AUDITOR_COMPLETED, APPROVED, FINAL, SENT_BACK
 
     @Column(columnDefinition = "TEXT")
     private String remarks;
@@ -63,6 +63,18 @@ public class Submission {
     private String auditorReviewedByRole;
     private LocalDateTime auditorReviewedOn;
 
+    private Long rootSubmissionId;
+    private Long parentSubmissionId;
+    private Long previousApprovedSubmissionId;
+    private String auditCycle;
+    private String reportCategory;
+    private LocalDateTime approvedAt;
+    private Long approvedByUserId;
+    private String approvedByName;
+    private String approvedByRole;
+    private String approvedByDesignation;
+    private Integer createdFromVersion;
+
     @Column(columnDefinition = "TEXT")
     private String valuesData; // JSON string of field values
 
@@ -72,7 +84,6 @@ public class Submission {
     @Column(columnDefinition = "TEXT")
     private String attachments; // JSON string of attachments list
 
-    @Version
     @Builder.Default
     private Integer version = 1;
 }

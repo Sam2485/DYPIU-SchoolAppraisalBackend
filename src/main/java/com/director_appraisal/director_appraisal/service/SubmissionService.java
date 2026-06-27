@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -27,6 +29,7 @@ public class SubmissionService {
     private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
     private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
+    private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED", "SENT_BACK");
 
     private final SubmissionRepository submissionRepository;
     private final SnapshotRepository snapshotRepository;
@@ -35,19 +38,33 @@ public class SubmissionService {
 
     @Transactional
     public Submission getOrCreateDraft(String email, String auditType) {
-        return submissionRepository.findByEmailAndAuditType(email, auditType)
-                .orElseGet(() -> {
-                    Submission submission = Submission.builder()
-                            .email(email)
-                            .auditType(auditType)
-                            .status("DRAFT")
-                            .valuesData("{}")
-                            .tablesData("{}")
-                            .attachments("[]")
-                            .version(1)
-                            .build();
-                    return submissionRepository.save(submission);
-                });
+        Optional<Submission> editableCycle = submissionRepository
+                .findFirstByEmailAndAuditTypeAndStatusInOrderByIdDesc(email, auditType, EDITABLE_CYCLE_STATUSES);
+        if (editableCycle.isPresent()) {
+            return editableCycle.get();
+        }
+
+        Optional<Submission> latestCycle = submissionRepository.findFirstByEmailAndAuditTypeOrderByIdDesc(email, auditType);
+        if (latestCycle.isPresent()) {
+            String statusUpper = latestCycle.get().getStatus().toUpperCase();
+            if (isApprovalStatus(statusUpper)) {
+                throw new SecurityException("Cannot edit an approved submission");
+            }
+            if (LOCKED_STATUSES.contains(statusUpper)) {
+                throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
+            }
+        }
+
+        Submission submission = Submission.builder()
+                .email(email)
+                .auditType(auditType)
+                .status("DRAFT")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .version(1)
+                .build();
+        return submissionRepository.save(submission);
     }
 
     @Transactional
@@ -58,6 +75,9 @@ public class SubmissionService {
         // Updates can only occur before final approval or during draft/submitted/sent-back status
         String statusUpper = submission.getStatus().toUpperCase();
         if (LOCKED_STATUSES.contains(statusUpper)) {
+            if (isApprovalStatus(statusUpper)) {
+                throw new SecurityException("Cannot edit an approved submission");
+            }
             throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
@@ -66,7 +86,7 @@ public class SubmissionService {
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
         submission.setAttachments(attachments);
-        submission.setVersion(submission.getVersion() + 1);
+        ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
         persistDataForStatus(saved);
@@ -80,6 +100,9 @@ public class SubmissionService {
 
         String statusUpper = submission.getStatus().toUpperCase();
         if (LOCKED_STATUSES.contains(statusUpper)) {
+            if (isApprovalStatus(statusUpper)) {
+                throw new SecurityException("Cannot edit an approved submission");
+            }
             throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
@@ -90,7 +113,8 @@ public class SubmissionService {
         submission.setAttachments(attachments);
         submission.setStatus("SUBMITTED");
         submission.setSubmittedAt(LocalDateTime.now());
-        submission.setVersion(submission.getVersion() + 1);
+        ensureRootSubmissionId(submission);
+        ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
         persistDataForStatus(saved);
@@ -109,6 +133,9 @@ public class SubmissionService {
 
         String statusUpper = submission.getStatus().toUpperCase();
         if (LOCKED_STATUSES.contains(statusUpper)) {
+            if (isApprovalStatus(statusUpper)) {
+                throw new SecurityException("Cannot edit an approved submission");
+            }
             throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
         }
 
@@ -117,7 +144,7 @@ public class SubmissionService {
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
         submission.setAttachments(attachments);
-        submission.setVersion(submission.getVersion() + 1);
+        ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
         persistDataForStatus(saved);
@@ -134,7 +161,9 @@ public class SubmissionService {
     }
 
     @Transactional
-    public Submission reviewSubmission(Long id, String status, String remarks, String reviewerName) {
+    public Submission reviewSubmission(Long id, String status, String remarks, String reportCategory,
+                                       String auditCycle, Integer version, String valuesData,
+                                       String tablesData, String attachments, User reviewer) {
         Submission submission = submissionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
 
@@ -153,11 +182,38 @@ public class SubmissionService {
             }
         }
 
-        submission.setStatus(isApprovalStatus(requestedStatus) ? STATUS_FINAL : requestedStatus);
+        if (isApprovalStatus(requestedStatus)) {
+            validateReviewer(reviewer);
+            validateReportCategory(reportCategory);
+            submission.setStatus(STATUS_APPROVED_LEGACY);
+            submission.setReportCategory(reportCategory.trim().toUpperCase());
+            submission.setAuditCycle(clean(auditCycle));
+            if (version != null) {
+                if (version < 1) {
+                    throw new IllegalArgumentException("Version must be greater than zero");
+                }
+                if (submission.getVersion() != null && !submission.getVersion().equals(version)) {
+                    throw new IllegalArgumentException("Approval version must match the submission version");
+                }
+                submission.setVersion(version);
+            }
+            ensureVersion(submission);
+            ensureRootSubmissionId(submission);
+            submission.setApprovedAt(LocalDateTime.now());
+            submission.setApprovedByUserId(reviewer.getId());
+            submission.setApprovedByName(reviewer.getName());
+            submission.setApprovedByRole(reviewer.getRole());
+            submission.setApprovedByDesignation(reviewer.getDesignation());
+        } else {
+            submission.setStatus(requestedStatus);
+            ensureVersion(submission);
+        }
         submission.setRemarks(remarks);
-        submission.setReviewedBy(reviewerName);
+        submission.setReviewedBy(reviewer.getName());
         submission.setReviewedAt(LocalDateTime.now());
-        submission.setVersion(submission.getVersion() + 1);
+        if (valuesData != null) submission.setValuesData(valuesData);
+        if (tablesData != null) submission.setTablesData(tablesData);
+        if (attachments != null) submission.setAttachments(attachments);
 
         Submission saved = submissionRepository.save(submission);
         persistDataForStatus(saved);
@@ -166,6 +222,16 @@ public class SubmissionService {
 
     public List<Snapshot> getSnapshotsForSubmission(Long submissionId) {
         return snapshotRepository.findBySubmissionIdOrderByVersionDesc(submissionId);
+    }
+
+    public List<Map<String, Object>> getVersionHistoryForSubmission(Long submissionId) {
+        Submission submission = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + submissionId));
+        Long rootSubmissionId = resolveRootSubmissionId(submission);
+        return submissionRepository.findLineage(rootSubmissionId).stream()
+                .filter(item -> isApprovalStatus(item.getStatus()))
+                .map(this::toVersionHistoryResponse)
+                .toList();
     }
 
     private void createSnapshot(Submission submission) {
@@ -196,7 +262,7 @@ public class SubmissionService {
     }
 
     private boolean isApprovalStatus(String status) {
-        return STATUS_APPROVED_LEGACY.equals(status) || STATUS_FINAL.equals(status);
+        return status != null && (STATUS_APPROVED_LEGACY.equalsIgnoreCase(status) || STATUS_FINAL.equalsIgnoreCase(status));
     }
 
     public boolean isAuditorAssigned(User auditor, Submission submission) {
@@ -434,7 +500,7 @@ public class SubmissionService {
 
         String currentStatus = submission.getStatus().toUpperCase();
         if (isApprovalStatus(currentStatus)) {
-            throw new IllegalStateException("Cannot edit a final submission");
+            throw new SecurityException("Cannot edit an approved submission");
         }
 
         if (submission.getAuditType() == null || submission.getAuditType().isBlank()) {
@@ -476,7 +542,7 @@ public class SubmissionService {
                 if (!"AUDITOR_COMPLETED".equals(currentStatus)) {
                     throw new IllegalStateException("Form can only be finalized after the audit has been completed by an auditor");
                 }
-                submission.setStatus(STATUS_FINAL);
+                submission.setStatus(STATUS_APPROVED_LEGACY);
             }
         }
 
@@ -505,9 +571,55 @@ public class SubmissionService {
         if (tablesData != null) submission.setTablesData(tablesData);
         if (attachments != null) submission.setAttachments(attachments);
 
-        submission.setVersion(submission.getVersion() + 1);
+        ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
+        persistDataForStatus(saved);
+        return saved;
+    }
+
+    @Transactional
+    public Submission createNextCycle(Long approvedSubmissionId, User caller, boolean preserveApprovedVersion,
+                                      Long previousApprovedSubmissionId, Integer nextVersion,
+                                      String nextAuditorType) {
+        validateReviewer(caller);
+        Submission approved = submissionRepository.findByIdForUpdate(approvedSubmissionId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + approvedSubmissionId));
+
+        if (!isApprovalStatus(approved.getStatus())) {
+            throw new IllegalStateException("Next audit cycle can only be created from an approved submission");
+        }
+
+        Long rootSubmissionId = resolveRootSubmissionId(approved);
+        Integer latestVersion = submissionRepository.findMaxVersionInLineage(rootSubmissionId);
+        int expectedNextVersion = latestVersion + 1;
+        int requestedNextVersion = nextVersion != null ? nextVersion : expectedNextVersion;
+        if (requestedNextVersion != expectedNextVersion) {
+            throw new IllegalArgumentException("Next version must be " + expectedNextVersion);
+        }
+        if (previousApprovedSubmissionId != null && !previousApprovedSubmissionId.equals(approved.getId())) {
+            throw new IllegalArgumentException("Previous approved submission ID must match the approved source submission");
+        }
+
+        Submission next = Submission.builder()
+                .email(approved.getEmail())
+                .auditType(approved.getAuditType())
+                .school(approved.getSchool())
+                .submittedBy(approved.getSubmittedBy())
+                .status("DRAFT")
+                .valuesData(clearCurrentCycleReviewData(approved.getValuesData(), approved.getAuditType()))
+                .tablesData(clearCurrentCycleReviewData(approved.getTablesData(), approved.getAuditType()))
+                .attachments(preserveApprovedVersion ? approved.getAttachments() : "[]")
+                .version(requestedNextVersion)
+                .rootSubmissionId(rootSubmissionId)
+                .parentSubmissionId(approved.getId())
+                .previousApprovedSubmissionId(previousApprovedSubmissionId != null ? previousApprovedSubmissionId : approved.getId())
+                .createdFromVersion(approved.getVersion())
+                .forwardedAuditorType(cleanAuditorType(nextAuditorType))
+                .forwardedAuditCategory(approved.getAuditType())
+                .build();
+
+        Submission saved = submissionRepository.save(next);
         persistDataForStatus(saved);
         return saved;
     }
@@ -523,5 +635,115 @@ public class SubmissionService {
 
     private boolean usesNormalizedTables(String status) {
         return status != null && NORMALIZED_TABLE_STATUSES.contains(status.toUpperCase());
+    }
+
+    private void validateReportCategory(String reportCategory) {
+        if (reportCategory == null || reportCategory.isBlank()) {
+            throw new IllegalArgumentException("Report category is required for approval");
+        }
+        String normalized = reportCategory.trim().toUpperCase();
+        if (!List.of("INTERNAL", "EXTERNAL").contains(normalized)) {
+            throw new IllegalArgumentException("Report category must be INTERNAL or EXTERNAL");
+        }
+    }
+
+    private void validateReviewer(User caller) {
+        String role = caller.getRole() == null ? "" : caller.getRole().toLowerCase();
+        if (!List.of("iqac", "vice-chancellor").contains(role)) {
+            throw new SecurityException("Only IQAC or VC can perform this action");
+        }
+    }
+
+    private void ensureVersion(Submission submission) {
+        if (submission.getVersion() == null || submission.getVersion() < 1) {
+            submission.setVersion(1);
+        }
+    }
+
+    private void ensureRootSubmissionId(Submission submission) {
+        if (submission.getRootSubmissionId() == null && submission.getId() != null) {
+            submission.setRootSubmissionId(submission.getId());
+        }
+    }
+
+    private Long resolveRootSubmissionId(Submission submission) {
+        return submission.getRootSubmissionId() != null ? submission.getRootSubmissionId() : submission.getId();
+    }
+
+    private String clean(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String cleanAuditorType(String nextAuditorType) {
+        return nextAuditorType == null || nextAuditorType.isBlank() ? null : nextAuditorType.trim().toLowerCase();
+    }
+
+    private Map<String, Object> toVersionHistoryResponse(Submission submission) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", submission.getId());
+        response.put("version", submission.getVersion());
+        response.put("auditCycle", submission.getAuditCycle());
+        response.put("reportCategory", submission.getReportCategory());
+        response.put("status", submission.getStatus());
+        response.put("valuesData", submission.getValuesData());
+        response.put("tablesData", submission.getTablesData());
+        response.put("attachments", submission.getAttachments());
+        response.put("auditorReviewedBy", submission.getAuditorReviewedBy());
+        response.put("auditorReviewedOn", submission.getAuditorReviewedOn());
+        response.put("approvedByName", submission.getApprovedByName());
+        response.put("approvedAt", submission.getApprovedAt());
+        return response;
+    }
+
+    private String clearCurrentCycleReviewData(String json, String auditType) {
+        if (json == null || json.isBlank() || "{}".equals(json.trim())) {
+            return json;
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+            if (!root.isObject()) {
+                return json;
+            }
+
+            removeCurrentCycleReviewFields((com.fasterxml.jackson.databind.node.ObjectNode) root, auditType);
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            return json;
+        }
+    }
+
+    private void removeCurrentCycleReviewFields(com.fasterxml.jackson.databind.node.ObjectNode node, String auditType) {
+        List<String> removeKeys = new java.util.ArrayList<>();
+        node.fields().forEachRemaining(entry -> {
+            String normalizedKey = normalizeJsonKey(entry.getKey());
+            if (shouldRemoveForNextCycle(normalizedKey, auditType)) {
+                removeKeys.add(entry.getKey());
+                return;
+            }
+            if (entry.getValue().isObject()) {
+                removeCurrentCycleReviewFields((com.fasterxml.jackson.databind.node.ObjectNode) entry.getValue(), auditType);
+            }
+        });
+        removeKeys.forEach(node::remove);
+    }
+
+    private boolean shouldRemoveForNextCycle(String normalizedKey, String auditType) {
+        if (normalizedKey.contains("auditsignoff") || normalizedKey.contains("approved")
+                || normalizedKey.contains("approval") || normalizedKey.contains("remark")) {
+            return true;
+        }
+        if ("academic".equalsIgnoreCase(auditType)) {
+            return normalizedKey.startsWith("parte") || normalizedKey.contains("parte");
+        }
+        if ("administrative".equalsIgnoreCase(auditType)) {
+            return normalizedKey.startsWith("partf") || normalizedKey.contains("partf");
+        }
+        return false;
+    }
+
+    private String normalizeJsonKey(String value) {
+        return value == null ? "" : value.toLowerCase().replaceAll("[^a-z0-9]", "");
     }
 }

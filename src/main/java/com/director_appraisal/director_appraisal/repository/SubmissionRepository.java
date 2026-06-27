@@ -1,12 +1,35 @@
 package com.director_appraisal.director_appraisal.repository;
 
 import com.director_appraisal.director_appraisal.model.Submission;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
 public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     Optional<Submission> findByEmailAndAuditType(String email, String auditType);
+    Optional<Submission> findFirstByEmailAndAuditTypeAndStatusInOrderByIdDesc(String email, String auditType, List<String> statuses);
+    Optional<Submission> findFirstByEmailAndAuditTypeOrderByIdDesc(String email, String auditType);
     List<Submission> findByStatusIn(List<String> statuses);
     List<Submission> findByAuditTypeAndStatusIn(String auditType, List<String> statuses);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Submission s where s.id = :id")
+    Optional<Submission> findByIdForUpdate(@Param("id") Long id);
+
+    @Query("""
+            select s from Submission s
+            where s.id = :rootSubmissionId or s.rootSubmissionId = :rootSubmissionId
+            order by s.version asc, s.id asc
+            """)
+    List<Submission> findLineage(@Param("rootSubmissionId") Long rootSubmissionId);
+
+    @Query("""
+            select coalesce(max(s.version), 0) from Submission s
+            where s.id = :rootSubmissionId or s.rootSubmissionId = :rootSubmissionId
+            """)
+    Integer findMaxVersionInLineage(@Param("rootSubmissionId") Long rootSubmissionId);
 }
