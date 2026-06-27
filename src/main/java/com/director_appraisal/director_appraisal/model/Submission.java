@@ -86,4 +86,24 @@ public class Submission {
 
     @Builder.Default
     private Integer version = 1;
+
+    @Builder.Default
+    private Boolean hasNextCycle = false;
+
+    private Long nextVersionId;
+
+    @com.fasterxml.jackson.annotation.JsonGetter("auditType")
+    public String getAuditTypeForJson() {
+        return auditType != null ? auditType.toUpperCase() : null;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("reportCategory")
+    public String getReportCategoryForJson() {
+        return reportCategory != null ? reportCategory.toUpperCase() : null;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("hasNextCycle")
+    public boolean getHasNextCycleForJson() {
+        return hasNextCycle != null && hasNextCycle;
+    }
 }

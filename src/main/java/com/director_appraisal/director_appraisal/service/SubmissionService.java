@@ -172,13 +172,16 @@ public class SubmissionService {
         }
 
         String requestedStatus = status.toUpperCase();
-        if (!List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK", "UNDER_REVIEW").contains(requestedStatus)) {
+        if ("SENT_BACK".equals(requestedStatus)) {
+            throw new IllegalArgumentException("Send back workflow is disabled.");
+        }
+        if (!List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "UNDER_REVIEW").contains(requestedStatus)) {
             throw new IllegalArgumentException("Invalid review status: " + status);
         }
 
-        if (List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK").contains(requestedStatus)) {
+        if (List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL).contains(requestedStatus)) {
             if (!"AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())) {
-                throw new IllegalStateException("Form can only be approved or sent back after the audit has been completed by an auditor");
+                throw new IllegalStateException("Form can only be approved after the audit has been completed by an auditor");
             }
         }
 
@@ -586,13 +589,25 @@ public class SubmissionService {
         Submission approved = submissionRepository.findByIdForUpdate(approvedSubmissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + approvedSubmissionId));
 
-        if (!isApprovalStatus(approved.getStatus())) {
+        if (!"APPROVED".equalsIgnoreCase(approved.getStatus())) {
             throw new IllegalStateException("Next audit cycle can only be created from an approved submission");
         }
 
+        if (!"INTERNAL".equalsIgnoreCase(approved.getReportCategory())) {
+            throw new IllegalArgumentException("Source reportCategory must be INTERNAL");
+        }
+
+        if (approved.getVersion() == null || approved.getVersion() != 1) {
+            throw new IllegalArgumentException("Source version must be exactly 1");
+        }
+
+        if (Boolean.TRUE.equals(approved.getHasNextCycle()) || approved.getNextVersionId() != null) {
+            throw new com.director_appraisal.director_appraisal.exception.ConflictException("Next cycle already exists");
+        }
+
         Long rootSubmissionId = resolveRootSubmissionId(approved);
-        Integer latestVersion = submissionRepository.findMaxVersionInLineage(rootSubmissionId);
-        int expectedNextVersion = latestVersion + 1;
+        
+        int expectedNextVersion = 2;
         int requestedNextVersion = nextVersion != null ? nextVersion : expectedNextVersion;
         if (requestedNextVersion != expectedNextVersion) {
             throw new IllegalArgumentException("Next version must be " + expectedNextVersion);
@@ -615,11 +630,18 @@ public class SubmissionService {
                 .parentSubmissionId(approved.getId())
                 .previousApprovedSubmissionId(previousApprovedSubmissionId != null ? previousApprovedSubmissionId : approved.getId())
                 .createdFromVersion(approved.getVersion())
-                .forwardedAuditorType(cleanAuditorType(nextAuditorType))
+                .forwardedAuditorType("external")
                 .forwardedAuditCategory(approved.getAuditType())
+                .hasNextCycle(false)
+                .nextVersionId(null)
                 .build();
 
         Submission saved = submissionRepository.save(next);
+        
+        approved.setHasNextCycle(true);
+        approved.setNextVersionId(saved.getId());
+        submissionRepository.save(approved);
+
         persistDataForStatus(saved);
         return saved;
     }

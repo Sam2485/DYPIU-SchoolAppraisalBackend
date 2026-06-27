@@ -132,6 +132,7 @@ class SubmissionServiceTest {
                 .school("School of Computer Science & Applications")
                 .submittedBy("Director")
                 .status("APPROVED")
+                .reportCategory("INTERNAL")
                 .version(1)
                 .rootSubmissionId(123L)
                 .valuesData("{\"schoolName\":\"School\",\"partEObservation\":\"old\",\"__auditSignOff\":{\"auditedBy\":{\"name\":\"Auditor\"}},\"other\":{\"keep\":\"yes\",\"partERemark\":\"old\"}}")
@@ -206,5 +207,62 @@ class SubmissionServiceTest {
         assertEquals(1, history.get(0).get("version"));
         assertEquals("INTERNAL", history.get(0).get("reportCategory"));
         assertEquals("IQAC User", history.get(0).get("approvedByName"));
+    }
+
+    @Test
+    void reviewSubmissionRejectsSentBack() {
+        Submission submission = Submission.builder().id(123L).status("AUDITOR_COMPLETED").build();
+        User iqac = User.builder().role("iqac").build();
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        assertThrows(IllegalArgumentException.class, () -> submissionService.reviewSubmission(
+                123L, "SENT_BACK", "remarks", "INTERNAL", "2025-26", 1, null, null, null, iqac
+        ));
+    }
+
+    @Test
+    void nextCycleRejectsExternalSource() {
+        Submission source = Submission.builder()
+                .id(123L)
+                .status("APPROVED")
+                .reportCategory("EXTERNAL")
+                .version(1)
+                .build();
+        User vc = User.builder().role("vice-chancellor").build();
+        when(submissionRepository.findByIdForUpdate(123L)).thenReturn(Optional.of(source));
+        assertThrows(IllegalArgumentException.class, () -> submissionService.createNextCycle(
+                123L, vc, true, 123L, 2, "EXTERNAL"
+        ));
+    }
+
+    @Test
+    void nextCycleRejectsNonV1Source() {
+        Submission source = Submission.builder()
+                .id(123L)
+                .status("APPROVED")
+                .reportCategory("INTERNAL")
+                .version(2)
+                .build();
+        User vc = User.builder().role("vice-chancellor").build();
+        when(submissionRepository.findByIdForUpdate(123L)).thenReturn(Optional.of(source));
+        assertThrows(IllegalArgumentException.class, () -> submissionService.createNextCycle(
+                123L, vc, true, 123L, 2, "EXTERNAL"
+        ));
+    }
+
+    @Test
+    void nextCyclePreventsDuplicateSuccessor() {
+        Submission source = Submission.builder()
+                .id(123L)
+                .status("APPROVED")
+                .reportCategory("INTERNAL")
+                .version(1)
+                .hasNextCycle(true)
+                .nextVersionId(124L)
+                .build();
+        User vc = User.builder().role("vice-chancellor").build();
+        when(submissionRepository.findByIdForUpdate(123L)).thenReturn(Optional.of(source));
+        assertThrows(com.director_appraisal.director_appraisal.exception.ConflictException.class, () -> submissionService.createNextCycle(
+                123L, vc, true, 123L, 2, "EXTERNAL"
+        ));
     }
 }

@@ -16,8 +16,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleAllExceptions(Exception ex, HttpServletRequest request) {
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
-        
-        if (ex instanceof IllegalArgumentException || ex instanceof IllegalStateException) {
+        if (ex instanceof NotFoundException) {
+            status = HttpStatus.NOT_FOUND;
+        } else if (ex instanceof ConflictException || ex instanceof org.springframework.dao.DataIntegrityViolationException) {
+            status = HttpStatus.CONFLICT;
+        } else if (ex instanceof IllegalArgumentException || ex instanceof IllegalStateException) {
             status = HttpStatus.BAD_REQUEST;
         } else if (ex instanceof SecurityException) {
             status = HttpStatus.FORBIDDEN;

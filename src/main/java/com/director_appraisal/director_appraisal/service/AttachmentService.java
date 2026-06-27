@@ -224,6 +224,57 @@ public class AttachmentService {
         }
     }
 
+    public java.io.InputStream downloadAttachmentStream(String fileUrl) throws IOException {
+        String objectName;
+        if (fileUrl.startsWith("/uploads/")) {
+            objectName = fileUrl.substring("/uploads/".length());
+        } else {
+            URI uri;
+            try {
+                uri = URI.create(fileUrl);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid attachment URL.");
+            }
+
+            String host = uri.getHost();
+            String path = uri.getPath();
+            String storageHostPrefix = bucketName + ".storage.googleapis.com";
+            String storagePathPrefix = "/" + bucketName + "/";
+
+            if (path != null && path.startsWith("/uploads/")) {
+                objectName = path.substring("/uploads/".length());
+            } else if ("storage.googleapis.com".equalsIgnoreCase(host) && path != null && path.startsWith(storagePathPrefix)) {
+                objectName = path.substring(storagePathPrefix.length());
+            } else if (storageHostPrefix.equalsIgnoreCase(host) && path != null && path.length() > 1) {
+                objectName = path.substring(1);
+            } else {
+                objectName = path != null ? path : fileUrl;
+            }
+        }
+
+        if (objectName.startsWith("/")) {
+            objectName = objectName.substring(1);
+        }
+
+        if (useGcp) {
+            com.google.cloud.storage.Blob blob = storage.get(BlobId.of(bucketName, objectName));
+            if (blob == null) {
+                throw new IOException("File not found in GCP bucket: " + objectName);
+            }
+            return java.nio.channels.Channels.newInputStream(blob.reader());
+        }
+
+        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        Path targetLocation = uploadDir.resolve(objectName).normalize();
+        if (!targetLocation.startsWith(uploadDir)) {
+            throw new IllegalArgumentException("Invalid attachment URL.");
+        }
+        if (!Files.exists(targetLocation)) {
+            throw new IOException("File not found locally: " + targetLocation);
+        }
+        return Files.newInputStream(targetLocation);
+    }
+
     public static class AttachmentResponse {
         private final String name;
         private final String url;

@@ -21,6 +21,8 @@ import java.util.Map;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
+    private final AttachmentService attachmentService;
+    private final com.director_appraisal.director_appraisal.repository.UserRepository userRepository;
 
     private String getCurrentUserEmail() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -272,5 +274,222 @@ public class SubmissionController {
         private Long previousApprovedSubmissionId;
         private Integer nextVersion;
         private String nextAuditorType;
+    }
+
+    @GetMapping("/{id}/attachments/download")
+    @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")
+    public void downloadAttachments(@PathVariable Long id, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        User user = getCurrentUserDetails();
+        Submission submission = submissionService.getSubmissionById(id)
+                .orElseThrow(() -> new com.director_appraisal.director_appraisal.exception.NotFoundException("Submission not found"));
+
+        boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
+        boolean isVc = "vice-chancellor".equalsIgnoreCase(user.getRole());
+        if (!isIqac && !isVc) {
+            throw new SecurityException("Only IQAC or VC may download attachments");
+        }
+
+        if (isVc) {
+            boolean statusAllowed = List.of("AUDITOR_COMPLETED", "APPROVED", "FINAL").contains(submission.getStatus().toUpperCase());
+            if (!statusAllowed) {
+                throw new SecurityException("Unauthorized access to submission");
+            }
+        } else {
+            // IQAC
+            boolean statusAllowed = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED", "FINAL", "SENT_BACK")
+                    .contains(submission.getStatus().toUpperCase());
+            if (!statusAllowed) {
+                throw new SecurityException("Unauthorized access to submission");
+            }
+        }
+
+        // Collect all attachments from submission metadata, valuesData, and tablesData
+        List<ExtractedAttachment> attachments = new java.util.ArrayList<>();
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        
+        try {
+            if (submission.getAttachments() != null && !submission.getAttachments().isBlank()) {
+                collectAttachments(mapper.readTree(submission.getAttachments()), attachments);
+            }
+            if (submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
+                collectAttachments(mapper.readTree(submission.getValuesData()), attachments);
+            }
+            if (submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
+                collectAttachments(mapper.readTree(submission.getTablesData()), attachments);
+            }
+        } catch (Exception e) {
+            // Ignore parse errors, just use what we can parse
+        }
+
+        if (attachments.isEmpty()) {
+            throw new com.director_appraisal.director_appraisal.exception.NotFoundException("No attachments found for this submission");
+        }
+
+        String zipFileName = getZipFileName(submission);
+
+        response.setContentType("application/zip");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + zipFileName + "\"");
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
+        java.util.Set<String> usedPaths = new java.util.HashSet<>();
+        List<String> missingFiles = new java.util.ArrayList<>();
+
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(response.getOutputStream())) {
+            for (ExtractedAttachment att : attachments) {
+                if (att.url == null || att.url.isBlank()) {
+                    continue;
+                }
+
+                String folderPath = getZipFolderPath(att, submission.getAuditType());
+                String sanitizedName = sanitizeFilename(att.fileName);
+                String zipEntryPath = folderPath + sanitizedName;
+
+                if (usedPaths.contains(zipEntryPath)) {
+                    int dotIndex = sanitizedName.lastIndexOf('.');
+                    String namePart = dotIndex >= 0 ? sanitizedName.substring(0, dotIndex) : sanitizedName;
+                    String extPart = dotIndex >= 0 ? sanitizedName.substring(dotIndex) : "";
+                    int counter = 1;
+                    String newEntryPath;
+                    do {
+                        newEntryPath = folderPath + namePart + "_" + counter + extPart;
+                        counter++;
+                    } while (usedPaths.contains(newEntryPath));
+                    zipEntryPath = newEntryPath;
+                }
+                usedPaths.add(zipEntryPath);
+
+                try (java.io.InputStream is = attachmentService.downloadAttachmentStream(att.url)) {
+                    java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(zipEntryPath);
+                    zos.putNextEntry(entry);
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        zos.write(buffer, 0, bytesRead);
+                    }
+                    zos.closeEntry();
+                } catch (Exception e) {
+                    missingFiles.add("File: " + att.fileName + ", URL: " + att.url + ", Error: " + e.getMessage());
+                }
+            }
+
+            if (!missingFiles.isEmpty()) {
+                java.util.zip.ZipEntry missingEntry = new java.util.zip.ZipEntry("missing-files.txt");
+                zos.putNextEntry(missingEntry);
+                String content = String.join("\n", missingFiles);
+                zos.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zos.closeEntry();
+            }
+        }
+    }
+
+    private void collectAttachments(com.fasterxml.jackson.databind.JsonNode node, List<ExtractedAttachment> list) {
+        if (node == null) return;
+        if (node.isObject()) {
+            if (node.has("url") && node.get("url").isTextual()) {
+                String url = node.get("url").asText();
+                if (url.startsWith("/uploads/") || url.contains(".storage.googleapis.com") || url.contains("storage.googleapis.com")) {
+                    ExtractedAttachment att = new ExtractedAttachment();
+                    att.url = url;
+                    
+                    if (node.has("fileName") && node.get("fileName").isTextual()) {
+                        att.fileName = node.get("fileName").asText();
+                    } else if (node.has("name") && node.get("name").isTextual()) {
+                        att.fileName = node.get("name").asText();
+                    } else {
+                        int lastSlash = url.lastIndexOf('/');
+                        att.fileName = lastSlash >= 0 ? url.substring(lastSlash + 1) : "attachment.pdf";
+                    }
+                    
+                    if (node.has("sectionId") && node.get("sectionId").isTextual()) {
+                        att.sectionId = node.get("sectionId").asText();
+                    }
+                    if (node.has("tableId") && node.get("tableId").isTextual()) {
+                        att.tableId = node.get("tableId").asText();
+                    }
+                    if (node.has("rowIndex") && node.get("rowIndex").isNumber()) {
+                        att.rowIndex = node.get("rowIndex").asInt();
+                    }
+                    if (node.has("column") && node.get("column").isTextual()) {
+                        att.column = node.get("column").asText();
+                    }
+                    list.add(att);
+                }
+            }
+            node.fields().forEachRemaining(entry -> collectAttachments(entry.getValue(), list));
+        } else if (node.isArray()) {
+            for (com.fasterxml.jackson.databind.JsonNode item : node) {
+                collectAttachments(item, list);
+            }
+        }
+    }
+
+    private String getZipFileName(Submission submission) {
+        String type = "academic".equalsIgnoreCase(submission.getAuditType()) ? "Academic" : "Administrative";
+        String entityName = "Unknown";
+        if ("academic".equalsIgnoreCase(submission.getAuditType())) {
+            entityName = submission.getSchool();
+        } else {
+            entityName = userRepository.findByEmail(submission.getEmail())
+                    .map(User::getPost)
+                    .orElse(submission.getSchool());
+        }
+        if (entityName == null || entityName.isBlank()) {
+            entityName = "Unknown";
+        }
+        entityName = entityName.replaceAll("[^A-Za-z0-9._-]", "_");
+        String cycle = submission.getAuditCycle();
+        if (cycle == null || cycle.isBlank()) {
+            cycle = "2025-26";
+        }
+        cycle = cycle.replaceAll("[^A-Za-z0-9._-]", "_");
+        return type + "_" + entityName + "_" + cycle + ".zip";
+    }
+
+    private String getZipFolderPath(ExtractedAttachment att, String auditType) {
+        String sec = att.sectionId != null ? att.sectionId.trim().toLowerCase() : "";
+        if ("academic".equalsIgnoreCase(auditType)) {
+            if (sec.contains("part-a") || sec.contains("parta")) {
+                return "Part-A/";
+            } else if (sec.contains("part-b") || sec.contains("partb")) {
+                return "Part-B/";
+            } else if (sec.contains("part-c") || sec.contains("partc")) {
+                return "Part-C/";
+            } else if (sec.contains("part-d") || sec.contains("partd")) {
+                return "Part-D/";
+            }
+            return "Other-Attachments/";
+        } else {
+            if (sec.contains("section-a") || sec.contains("sectiona") || sec.contains("part-a") || sec.contains("parta")) {
+                return "Section-A/";
+            } else if (sec.contains("section-b") || sec.contains("sectionb") || sec.contains("part-b") || sec.contains("partb")) {
+                return "Section-B/";
+            } else if (sec.contains("section-c") || sec.contains("sectionc") || sec.contains("part-c") || sec.contains("partc")) {
+                return "Section-C/";
+            }
+            return "Other-Attachments/";
+        }
+    }
+
+    private String sanitizeFilename(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "file.pdf";
+        }
+        filename = filename.replace("\\", "/");
+        int lastSlash = filename.lastIndexOf('/');
+        String base = lastSlash >= 0 ? filename.substring(lastSlash + 1) : filename;
+        base = base.replace("..", "_");
+        String clean = base.replaceAll("[^A-Za-z0-9._-]", "_");
+        return clean.isBlank() ? "file.pdf" : clean;
+    }
+
+    @Data
+    public static class ExtractedAttachment {
+        private String fileName;
+        private String url;
+        private String sectionId;
+        private String tableId;
+        private Integer rowIndex;
+        private String column;
     }
 }
