@@ -32,4 +32,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
             where s.id = :rootSubmissionId or s.rootSubmissionId = :rootSubmissionId
             """)
     Integer findMaxVersionInLineage(@Param("rootSubmissionId") Long rootSubmissionId);
+
+    Optional<Submission> findByRootSubmissionIdAndVersion(Long rootSubmissionId, Integer version);
+    Optional<Submission> findByParentSubmissionId(Long parentSubmissionId);
 }

@@ -606,8 +606,31 @@ public class SubmissionService {
         }
 
         Long rootSubmissionId = resolveRootSubmissionId(approved);
-        
         int expectedNextVersion = 2;
+
+        // Check if next cycle already exists in the database (e.g. from prior deployment or concurrency)
+        Optional<Submission> existingByRootAndVersion = submissionRepository.findByRootSubmissionIdAndVersion(rootSubmissionId, expectedNextVersion);
+        if (existingByRootAndVersion.isPresent()) {
+            Submission existing = existingByRootAndVersion.get();
+            if (!Boolean.TRUE.equals(approved.getHasNextCycle()) || approved.getNextVersionId() == null) {
+                approved.setHasNextCycle(true);
+                approved.setNextVersionId(existing.getId());
+                submissionRepository.save(approved);
+            }
+            return existing;
+        }
+
+        Optional<Submission> existingByParent = submissionRepository.findByParentSubmissionId(approved.getId());
+        if (existingByParent.isPresent()) {
+            Submission existing = existingByParent.get();
+            if (!Boolean.TRUE.equals(approved.getHasNextCycle()) || approved.getNextVersionId() == null) {
+                approved.setHasNextCycle(true);
+                approved.setNextVersionId(existing.getId());
+                submissionRepository.save(approved);
+            }
+            return existing;
+        }
+        
         int requestedNextVersion = nextVersion != null ? nextVersion : expectedNextVersion;
         if (requestedNextVersion != expectedNextVersion) {
             throw new IllegalArgumentException("Next version must be " + expectedNextVersion);
