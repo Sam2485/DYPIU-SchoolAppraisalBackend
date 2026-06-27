@@ -2,8 +2,10 @@ package com.director_appraisal.director_appraisal.service;
 
 import com.director_appraisal.director_appraisal.model.Snapshot;
 import com.director_appraisal.director_appraisal.model.Submission;
+import com.director_appraisal.director_appraisal.model.SubmissionAuditorAssignment;
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
+import com.director_appraisal.director_appraisal.repository.SubmissionAuditorAssignmentRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.atLeastOnce;
 
 @ExtendWith(MockitoExtension.class)
 class SubmissionServiceTest {
@@ -41,6 +44,12 @@ class SubmissionServiceTest {
 
     @Mock
     private TableDataPromotionService tableDataPromotionService;
+
+    @Mock
+    private SubmissionAuditorAssignmentRepository auditorAssignmentRepository;
+
+    @Mock
+    private AcademicYearService academicYearService;
 
     @InjectMocks
     private SubmissionService submissionService;
@@ -146,6 +155,8 @@ class SubmissionServiceTest {
                 .build();
 
         when(submissionRepository.findByIdForUpdate(123L)).thenReturn(Optional.of(source));
+        when(submissionRepository.findByRootSubmissionIdAndVersion(123L, 2)).thenReturn(Optional.empty());
+        when(submissionRepository.findByParentSubmissionId(123L)).thenReturn(Optional.empty());
         when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> {
             Submission saved = invocation.getArgument(0);
             saved.setId(124L);
@@ -262,6 +273,92 @@ class SubmissionServiceTest {
         when(submissionRepository.findByIdForUpdate(123L)).thenReturn(Optional.of(source));
         assertThrows(com.director_appraisal.director_appraisal.exception.ConflictException.class, () -> submissionService.createNextCycle(
                 123L, vc, true, 123L, 2, "EXTERNAL"
+        ));
+    }
+
+    @Test
+    void iqacCanForwardToMultipleMatchingAuditors() {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("director@dypiu.ac.in")
+                .auditType("academic")
+                .school("SOCSEA")
+                .status("SUBMITTED")
+                .build();
+        User iqac = User.builder().id(1L).email("iqac@dypiu.ac.in").role("iqac").build();
+        User auditorOne = User.builder()
+                .id(4L)
+                .email("one@example.com")
+                .name("Auditor One")
+                .role("academic-internal-auditor")
+                .accountType("auditor")
+                .category("academic")
+                .auditorType("internal")
+                .school("SOCSEA")
+                .build();
+        User auditorTwo = User.builder()
+                .id(8L)
+                .email("two@example.com")
+                .name("Auditor Two")
+                .role("academic-internal-auditor")
+                .accountType("auditor")
+                .category("academic")
+                .auditorType("internal")
+                .school("School of Computer Science & Applications")
+                .build();
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        when(auditorAssignmentRepository.existsBySubmissionId(123L)).thenReturn(false);
+        when(userRepository.findById(4L)).thenReturn(Optional.of(auditorOne));
+        when(userRepository.findById(8L)).thenReturn(Optional.of(auditorTwo));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission updated = submissionService.updateSubmission(
+                123L,
+                iqac,
+                "UNDER_REVIEW",
+                "INTERNAL",
+                null,
+                List.of(4L, 8L),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertEquals("UNDER_REVIEW", updated.getStatus());
+        assertEquals("internal", updated.getForwardedAuditorType());
+        assertNotNull(updated.getForwardedAt());
+        verify(auditorAssignmentRepository, atLeastOnce()).save(any(SubmissionAuditorAssignment.class));
+    }
+
+    @Test
+    void forwardingRejectsDuplicateForwarding() {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("director@dypiu.ac.in")
+                .auditType("academic")
+                .school("SOCSEA")
+                .status("UNDER_REVIEW")
+                .build();
+        User iqac = User.builder().id(1L).email("iqac@dypiu.ac.in").role("iqac").build();
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        when(auditorAssignmentRepository.existsBySubmissionId(123L)).thenReturn(true);
+
+        assertThrows(com.director_appraisal.director_appraisal.exception.ConflictException.class, () -> submissionService.updateSubmission(
+                123L,
+                iqac,
+                "UNDER_REVIEW",
+                "INTERNAL",
+                null,
+                List.of(4L),
+                null,
+                null,
+                null,
+                null,
+                null
         ));
     }
 }

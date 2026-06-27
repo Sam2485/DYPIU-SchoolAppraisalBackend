@@ -1,6 +1,7 @@
 package com.director_appraisal.director_appraisal.controller;
 
 import com.director_appraisal.director_appraisal.model.User;
+import com.director_appraisal.director_appraisal.service.AcademicYearService;
 import com.director_appraisal.director_appraisal.service.JwtService;
 import com.director_appraisal.director_appraisal.service.UserService;
 import lombok.Data;
@@ -18,6 +19,7 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtService jwtService;
+    private final AcademicYearService academicYearService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
@@ -31,12 +33,15 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid email address or password."));
         }
 
+        String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
+
         // Generate JWT Token
         String token = jwtService.generateToken(user, Map.of(
                 "name", user.getName(),
                 "designation", user.getDesignation(),
                 "school", user.getSchool(),
-                "role", user.getRole()
+                "role", user.getRole(),
+                "currentAcademicYear", currentAcademicYear
         ));
 
         return ResponseEntity.ok(new LoginResponse(
@@ -52,7 +57,8 @@ public class AuthController {
                 user.getCategory(),
                 user.getAuditorType(),
                 user.getAuditorRole(),
-                user.getPost()
+                user.getPost(),
+                currentAcademicYear
         ));
     }
 
@@ -116,5 +122,6 @@ public class AuthController {
         private final String auditorType;
         private final String auditorRole;
         private final String post;
+        private final String currentAcademicYear;
     }
 }

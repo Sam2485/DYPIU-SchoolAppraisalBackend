@@ -4,6 +4,7 @@ import com.director_appraisal.director_appraisal.model.Submission;
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.service.SubmissionService;
 import com.director_appraisal.director_appraisal.service.AttachmentService;
+import com.director_appraisal.director_appraisal.util.SchoolUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -259,7 +260,7 @@ public class SubmissionController {
 
     @Data
     public static class ReviewRequest {
-        private String status; // APPROVED/FINAL, SENT_BACK, UNDER_REVIEW
+        private String status; // APPROVED/FINAL, UNDER_REVIEW
         private String remarks;
         private String reportCategory;
         private String auditCycle;
@@ -297,7 +298,7 @@ public class SubmissionController {
             }
         } else {
             // IQAC
-            boolean statusAllowed = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED", "FINAL", "SENT_BACK")
+            boolean statusAllowed = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED", "FINAL")
                     .contains(submission.getStatus().toUpperCase());
             if (!statusAllowed) {
                 throw new SecurityException("Unauthorized access to submission");
@@ -429,22 +430,36 @@ public class SubmissionController {
         String type = "academic".equalsIgnoreCase(submission.getAuditType()) ? "Academic" : "Administrative";
         String entityName = "Unknown";
         if ("academic".equalsIgnoreCase(submission.getAuditType())) {
-            entityName = submission.getSchool();
+            entityName = SchoolUtils.canonicalizeSchool(submission.getSchool());
         } else {
             entityName = userRepository.findByEmail(submission.getEmail())
                     .map(User::getPost)
-                    .orElse(submission.getSchool());
+                    .orElse(submission.getAdministrativePost());
+            entityName = formatAdministrativePost(entityName);
         }
         if (entityName == null || entityName.isBlank()) {
             entityName = "Unknown";
         }
         entityName = entityName.replaceAll("[^A-Za-z0-9._-]", "_");
-        String cycle = submission.getAuditCycle();
+        String cycle = submission.getAcademicYear() != null ? submission.getAcademicYear() : submission.getAuditCycle();
         if (cycle == null || cycle.isBlank()) {
-            cycle = "2025-26";
+            cycle = "2025-2026";
         }
         cycle = cycle.replaceAll("[^A-Za-z0-9._-]", "_");
         return type + "_" + entityName + "_" + cycle + ".zip";
+    }
+
+    private String formatAdministrativePost(String post) {
+        if (post == null || post.isBlank()) {
+            return "Unknown";
+        }
+        return switch (post.trim().toLowerCase()) {
+            case "registrar" -> "Registrar";
+            case "hr" -> "HR";
+            case "dean-student-welfare" -> "Dean_Student_Welfare";
+            case "dean-placement" -> "Dean_Placement";
+            default -> post;
+        };
     }
 
     private String getZipFolderPath(ExtractedAttachment att, String auditType) {

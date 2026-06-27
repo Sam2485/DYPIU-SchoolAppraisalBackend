@@ -1,9 +1,12 @@
 package com.director_appraisal.director_appraisal.service;
 
+import com.director_appraisal.director_appraisal.exception.ConflictException;
 import com.director_appraisal.director_appraisal.model.Snapshot;
 import com.director_appraisal.director_appraisal.model.Submission;
+import com.director_appraisal.director_appraisal.model.SubmissionAuditorAssignment;
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
+import com.director_appraisal.director_appraisal.repository.SubmissionAuditorAssignmentRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
 import com.director_appraisal.director_appraisal.util.SchoolUtils;
@@ -25,26 +28,29 @@ public class SubmissionService {
     private static final String STATUS_APPROVED_LEGACY = "APPROVED";
     private static final String STATUS_FINAL = "FINAL";
     private static final List<String> LOCKED_STATUSES = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
-    private static final List<String> REVIEWER_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
-    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
+    private static final List<String> REVIEWER_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
-    private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL, "SENT_BACK");
-    private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED", "SENT_BACK");
+    private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED");
 
     private final SubmissionRepository submissionRepository;
     private final SnapshotRepository snapshotRepository;
     private final UserRepository userRepository;
     private final TableDataPromotionService tableDataPromotionService;
+    private final SubmissionAuditorAssignmentRepository auditorAssignmentRepository;
+    private final AcademicYearService academicYearService;
 
     @Transactional
     public Submission getOrCreateDraft(String email, String auditType) {
+        String academicYear = academicYearService.getCurrentAcademicYearLabel();
         Optional<Submission> editableCycle = submissionRepository
-                .findFirstByEmailAndAuditTypeAndStatusInOrderByIdDesc(email, auditType, EDITABLE_CYCLE_STATUSES);
+                .findFirstByEmailAndAuditTypeAndAcademicYearAndStatusInOrderByIdDesc(email, auditType, academicYear, EDITABLE_CYCLE_STATUSES);
         if (editableCycle.isPresent()) {
             return editableCycle.get();
         }
 
-        Optional<Submission> latestCycle = submissionRepository.findFirstByEmailAndAuditTypeOrderByIdDesc(email, auditType);
+        Optional<Submission> latestCycle = submissionRepository.findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(email, auditType, academicYear);
         if (latestCycle.isPresent()) {
             String statusUpper = latestCycle.get().getStatus().toUpperCase();
             if (isApprovalStatus(statusUpper)) {
@@ -62,9 +68,14 @@ public class SubmissionService {
                 .valuesData("{}")
                 .tablesData("{}")
                 .attachments("[]")
+                .academicYear(academicYear)
+                .auditCycle(academicYear)
+                .reportCategory("INTERNAL")
                 .version(1)
                 .build();
-        return submissionRepository.save(submission);
+        Submission saved = submissionRepository.save(submission);
+        saved.setRootSubmissionId(saved.getId());
+        return submissionRepository.save(saved);
     }
 
     @Transactional
@@ -86,6 +97,7 @@ public class SubmissionService {
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
         submission.setAttachments(attachments);
+        ensureAcademicYear(submission);
         ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
@@ -113,6 +125,7 @@ public class SubmissionService {
         submission.setAttachments(attachments);
         submission.setStatus("SUBMITTED");
         submission.setSubmittedAt(LocalDateTime.now());
+        ensureAcademicYear(submission);
         ensureRootSubmissionId(submission);
         ensureVersion(submission);
 
@@ -144,6 +157,7 @@ public class SubmissionService {
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
         submission.setAttachments(attachments);
+        ensureAcademicYear(submission);
         ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
@@ -187,10 +201,15 @@ public class SubmissionService {
 
         if (isApprovalStatus(requestedStatus)) {
             validateReviewer(reviewer);
-            validateReportCategory(reportCategory);
+            String expectedReportCategory = resolveExpectedReportCategoryForApproval(submission);
+            validateReportCategory(reportCategory, expectedReportCategory);
             submission.setStatus(STATUS_APPROVED_LEGACY);
-            submission.setReportCategory(reportCategory.trim().toUpperCase());
-            submission.setAuditCycle(clean(auditCycle));
+            submission.setReportCategory(expectedReportCategory);
+            if (clean(auditCycle) != null) {
+                submission.setAuditCycle(clean(auditCycle));
+                submission.setAcademicYear(clean(auditCycle));
+            }
+            ensureAcademicYear(submission);
             if (version != null) {
                 if (version < 1) {
                     throw new IllegalArgumentException("Version must be greater than zero");
@@ -269,6 +288,13 @@ public class SubmissionService {
     }
 
     public boolean isAuditorAssigned(User auditor, Submission submission) {
+        List<SubmissionAuditorAssignment> assignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+        if (!assignments.isEmpty()) {
+            return assignments.stream().anyMatch(assignment ->
+                    assignment.getAuditorId().equals(auditor.getId())
+                            || (assignment.getAuditorEmail() != null && assignment.getAuditorEmail().equalsIgnoreCase(auditor.getEmail())));
+        }
+
         if (auditor.getId().equals(submission.getForwardedToAuditorId()) || 
             (submission.getForwardedToAuditorEmail() != null && 
              submission.getForwardedToAuditorEmail().equalsIgnoreCase(auditor.getEmail()))) {
@@ -293,6 +319,10 @@ public class SubmissionService {
     }
 
     public boolean isAuditorFallbackMatch(User auditor, Submission submission) {
+        if (submission.getId() != null && auditorAssignmentRepository.existsBySubmissionId(submission.getId())) {
+            return false;
+        }
+
         boolean statusMatch = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED").contains(submission.getStatus().toUpperCase());
         if (!statusMatch) {
             return false;
@@ -519,6 +549,9 @@ public class SubmissionService {
 
         if (status != null && !status.isBlank()) {
             String upperStatus = status.toUpperCase();
+            if ("SENT_BACK".equals(upperStatus)) {
+                throw new IllegalArgumentException("Send back workflow is disabled.");
+            }
             if (upperStatus.equals("AUDITOR_COMPLETED")) {
                 if (!isAssignedAuditor && !isIqac) {
                     throw new IllegalStateException("Only assigned auditors can complete the audit");
@@ -533,6 +566,11 @@ public class SubmissionService {
                 if (!isIqac) {
                     throw new IllegalStateException("Only IQAC can forward submissions for review");
                 }
+                assignSelectedAuditorsForReview(
+                        submission,
+                        forwardedAuditorType,
+                        requestForwardedToAuditorIds
+                );
                 submission.setStatus("UNDER_REVIEW");
             } else if (upperStatus.equals("SUBMITTED")) {
                 submission.setStatus("SUBMITTED");
@@ -546,14 +584,18 @@ public class SubmissionService {
                     throw new IllegalStateException("Form can only be finalized after the audit has been completed by an auditor");
                 }
                 submission.setStatus(STATUS_APPROVED_LEGACY);
+                String expectedReportCategory = resolveExpectedReportCategoryForApproval(submission);
+                submission.setReportCategory(expectedReportCategory);
+                ensureAcademicYear(submission);
+                submission.setApprovedAt(LocalDateTime.now());
+                submission.setApprovedByUserId(caller.getId());
+                submission.setApprovedByName(caller.getName());
+                submission.setApprovedByRole(caller.getRole());
+                submission.setApprovedByDesignation(caller.getDesignation());
             }
         }
 
-        if (isIqac && forwardedAuditorType != null && !forwardedAuditorType.isBlank()) {
-            populateForwardingAuditors(submission, forwardedAuditorType);
-        }
-
-        if (isIqac) {
+        if (isIqac && (status == null || !"UNDER_REVIEW".equalsIgnoreCase(status))) {
             ObjectMapper mapper = new ObjectMapper();
             try {
                 if (requestForwardedToAuditorIds != null) {
@@ -601,8 +643,12 @@ public class SubmissionService {
             throw new IllegalArgumentException("Source version must be exactly 1");
         }
 
+        if (!"EXTERNAL".equalsIgnoreCase(clean(nextAuditorType))) {
+            throw new IllegalArgumentException("Next auditor type must be EXTERNAL");
+        }
+
         if (Boolean.TRUE.equals(approved.getHasNextCycle()) || approved.getNextVersionId() != null) {
-            throw new com.director_appraisal.director_appraisal.exception.ConflictException("Next cycle already exists");
+            throw new ConflictException("Next cycle already exists");
         }
 
         Long rootSubmissionId = resolveRootSubmissionId(approved);
@@ -611,24 +657,12 @@ public class SubmissionService {
         // Check if next cycle already exists in the database (e.g. from prior deployment or concurrency)
         Optional<Submission> existingByRootAndVersion = submissionRepository.findByRootSubmissionIdAndVersion(rootSubmissionId, expectedNextVersion);
         if (existingByRootAndVersion.isPresent()) {
-            Submission existing = existingByRootAndVersion.get();
-            if (!Boolean.TRUE.equals(approved.getHasNextCycle()) || approved.getNextVersionId() == null) {
-                approved.setHasNextCycle(true);
-                approved.setNextVersionId(existing.getId());
-                submissionRepository.save(approved);
-            }
-            return existing;
+            throw new ConflictException("Next cycle already exists");
         }
 
         Optional<Submission> existingByParent = submissionRepository.findByParentSubmissionId(approved.getId());
         if (existingByParent.isPresent()) {
-            Submission existing = existingByParent.get();
-            if (!Boolean.TRUE.equals(approved.getHasNextCycle()) || approved.getNextVersionId() == null) {
-                approved.setHasNextCycle(true);
-                approved.setNextVersionId(existing.getId());
-                submissionRepository.save(approved);
-            }
-            return existing;
+            throw new ConflictException("Next cycle already exists");
         }
         
         int requestedNextVersion = nextVersion != null ? nextVersion : expectedNextVersion;
@@ -649,6 +683,10 @@ public class SubmissionService {
                 .tablesData(clearCurrentCycleReviewData(approved.getTablesData(), approved.getAuditType()))
                 .attachments(preserveApprovedVersion ? approved.getAttachments() : "[]")
                 .version(requestedNextVersion)
+                .academicYear(approved.getAcademicYear() != null ? approved.getAcademicYear() : approved.getAuditCycle())
+                .auditCycle(approved.getAuditCycle())
+                .reportCategory("EXTERNAL")
+                .administrativePost(approved.getAdministrativePost())
                 .rootSubmissionId(rootSubmissionId)
                 .parentSubmissionId(approved.getId())
                 .previousApprovedSubmissionId(previousApprovedSubmissionId != null ? previousApprovedSubmissionId : approved.getId())
@@ -682,13 +720,142 @@ public class SubmissionService {
         return status != null && NORMALIZED_TABLE_STATUSES.contains(status.toUpperCase());
     }
 
-    private void validateReportCategory(String reportCategory) {
+    private void assignSelectedAuditorsForReview(Submission submission, String forwardedAuditorType, List<Long> selectedAuditorIds) {
+        if (submission.getId() == null) {
+            throw new IllegalStateException("Submission must be saved before auditor assignment");
+        }
+        if (submission.getForwardedAt() != null || auditorAssignmentRepository.existsBySubmissionId(submission.getId())) {
+            throw new ConflictException("Submission has already been forwarded to auditor");
+        }
+        if (selectedAuditorIds == null || selectedAuditorIds.isEmpty()) {
+            throw new IllegalArgumentException("At least one auditor must be selected");
+        }
+
+        String requestedType = cleanAuditorType(forwardedAuditorType);
+        if (requestedType == null || !List.of("internal", "external").contains(requestedType)) {
+            throw new IllegalArgumentException("Forwarded auditor type must be INTERNAL or EXTERNAL");
+        }
+
+        String auditType = resolveAuditType(submission, submission.getForwardedAuditCategory());
+        if (auditType == null || auditType.isBlank()) {
+            throw new IllegalArgumentException("Audit type is required to forward submission to auditor");
+        }
+
+        List<User> selectedAuditors = selectedAuditorIds.stream()
+                .distinct()
+                .map(id -> userRepository.findById(id)
+                        .orElseThrow(() -> new IllegalArgumentException("Selected auditor not found: " + id)))
+                .toList();
+
+        String submitterPost = resolveAdministrativePost(submission);
+        String submissionSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+        for (User auditor : selectedAuditors) {
+            validateSelectedAuditor(auditor, auditType, requestedType, submissionSchool, submitterPost);
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            submission.setForwardedToAuditorIds(mapper.writeValueAsString(selectedAuditors.stream().map(User::getId).toList()));
+            submission.setForwardedToAuditorNames(mapper.writeValueAsString(selectedAuditors.stream().map(User::getName).toList()));
+            submission.setForwardedToAuditorEmails(mapper.writeValueAsString(selectedAuditors.stream().map(User::getEmail).toList()));
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to store selected auditor metadata", e);
+        }
+
+        User first = selectedAuditors.get(0);
+        submission.setForwardedToAuditorId(first.getId());
+        submission.setForwardedToAuditorName(first.getName());
+        submission.setForwardedToAuditorEmail(first.getEmail());
+        submission.setForwardedAuditorType(requestedType);
+        submission.setForwardedAuditCategory(auditType);
+        submission.setForwardedAt(LocalDateTime.now());
+
+        LocalDateTime assignedAt = LocalDateTime.now();
+        selectedAuditors.forEach(auditor -> auditorAssignmentRepository.save(SubmissionAuditorAssignment.builder()
+                .submissionId(submission.getId())
+                .auditorId(auditor.getId())
+                .auditorName(auditor.getName())
+                .auditorEmail(auditor.getEmail())
+                .auditorType(requestedType)
+                .category(auditType)
+                .assignedAt(assignedAt)
+                .build()));
+    }
+
+    private void validateSelectedAuditor(User auditor, String auditType, String requestedType, String submissionSchool, String submitterPost) {
+        String role = normalize(auditor.getRole());
+        String accountType = normalize(auditor.getAccountType());
+        if (!"auditor".equals(accountType) && (role == null || !role.contains("auditor"))) {
+            throw new IllegalArgumentException("Selected user is not an auditor: " + auditor.getEmail());
+        }
+        if (auditor.getCategory() == null || !auditor.getCategory().equalsIgnoreCase(auditType)) {
+            throw new IllegalArgumentException("Selected auditor category does not match submission audit type: " + auditor.getEmail());
+        }
+        if (auditor.getAuditorType() == null || !auditor.getAuditorType().equalsIgnoreCase(requestedType)) {
+            throw new IllegalArgumentException("Selected auditor type does not match requested auditor type: " + auditor.getEmail());
+        }
+        if ("academic".equalsIgnoreCase(auditType)) {
+            String auditorSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
+            if (submissionSchool == null || auditorSchool == null || !submissionSchool.equalsIgnoreCase(auditorSchool)) {
+                throw new IllegalArgumentException("Academic auditor must match the submission school: " + auditor.getEmail());
+            }
+        } else if ("administrative".equalsIgnoreCase(auditType)) {
+            if (submitterPost == null || auditor.getPost() == null || !submitterPost.equalsIgnoreCase(auditor.getPost())) {
+                throw new IllegalArgumentException("Administrative auditor must match the administrative post: " + auditor.getEmail());
+            }
+        }
+    }
+
+    private String resolveAdministrativePost(Submission submission) {
+        if (submission.getAdministrativePost() != null && !submission.getAdministrativePost().isBlank()) {
+            return submission.getAdministrativePost().trim().toLowerCase();
+        }
+        return userRepository.findByEmail(submission.getEmail())
+                .map(User::getPost)
+                .map(this::normalize)
+                .orElse(null);
+    }
+
+    private String resolveExpectedReportCategoryForApproval(Submission submission) {
+        String fromAuditorType = cleanAuditorType(submission.getForwardedAuditorType());
+        String expectedFromAuditor = null;
+        if ("internal".equals(fromAuditorType)) {
+            expectedFromAuditor = "INTERNAL";
+        } else if ("external".equals(fromAuditorType)) {
+            expectedFromAuditor = "EXTERNAL";
+        }
+
+        String expectedFromVersion = null;
+        if (submission.getVersion() != null) {
+            if (submission.getVersion() == 1) {
+                expectedFromVersion = "INTERNAL";
+            } else if (submission.getVersion() == 2) {
+                expectedFromVersion = "EXTERNAL";
+            }
+        }
+
+        if (expectedFromAuditor != null && expectedFromVersion != null && !expectedFromAuditor.equals(expectedFromVersion)) {
+            throw new IllegalStateException("Report category does not match assigned auditor type and version");
+        }
+        if (expectedFromAuditor != null) {
+            return expectedFromAuditor;
+        }
+        if (expectedFromVersion != null) {
+            return expectedFromVersion;
+        }
+        return "INTERNAL";
+    }
+
+    private void validateReportCategory(String reportCategory, String expectedReportCategory) {
         if (reportCategory == null || reportCategory.isBlank()) {
             throw new IllegalArgumentException("Report category is required for approval");
         }
         String normalized = reportCategory.trim().toUpperCase();
         if (!List.of("INTERNAL", "EXTERNAL").contains(normalized)) {
             throw new IllegalArgumentException("Report category must be INTERNAL or EXTERNAL");
+        }
+        if (!normalized.equals(expectedReportCategory)) {
+            throw new IllegalArgumentException("Report category must be " + expectedReportCategory + " for this submission");
         }
     }
 
@@ -723,10 +890,31 @@ public class SubmissionService {
         return nextAuditorType == null || nextAuditorType.isBlank() ? null : nextAuditorType.trim().toLowerCase();
     }
 
+    private String normalize(String value) {
+        return value == null ? null : value.trim().toLowerCase();
+    }
+
+    private void ensureAcademicYear(Submission submission) {
+        if (submission.getAcademicYear() == null || submission.getAcademicYear().isBlank()) {
+            String year = submission.getAuditCycle();
+            if (year == null || year.isBlank()) {
+                year = academicYearService.getCurrentAcademicYearLabel();
+            }
+            submission.setAcademicYear(year);
+        }
+        if (submission.getAuditCycle() == null || submission.getAuditCycle().isBlank()) {
+            submission.setAuditCycle(submission.getAcademicYear());
+        }
+        if (submission.getReportCategory() == null || submission.getReportCategory().isBlank()) {
+            submission.setReportCategory(submission.getVersion() != null && submission.getVersion() == 2 ? "EXTERNAL" : "INTERNAL");
+        }
+    }
+
     private Map<String, Object> toVersionHistoryResponse(Submission submission) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", submission.getId());
         response.put("version", submission.getVersion());
+        response.put("academicYear", submission.getAcademicYear() != null ? submission.getAcademicYear() : submission.getAuditCycle());
         response.put("auditCycle", submission.getAuditCycle());
         response.put("reportCategory", submission.getReportCategory());
         response.put("status", submission.getStatus());

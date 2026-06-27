@@ -31,7 +31,7 @@ public class Submission {
     private LocalDateTime submittedAt;
 
     @Column(nullable = false)
-    private String status; // DRAFT, SUBMITTED, UNDER_REVIEW, AUDITOR_COMPLETED, APPROVED, FINAL, SENT_BACK
+    private String status; // DRAFT, SUBMITTED, UNDER_REVIEW, AUDITOR_COMPLETED, APPROVED, FINAL
 
     @Column(columnDefinition = "TEXT")
     private String remarks;
@@ -66,8 +66,10 @@ public class Submission {
     private Long rootSubmissionId;
     private Long parentSubmissionId;
     private Long previousApprovedSubmissionId;
+    private String academicYear;
     private String auditCycle;
     private String reportCategory;
+    private String administrativePost;
     private LocalDateTime approvedAt;
     private Long approvedByUserId;
     private String approvedByName;
@@ -100,6 +102,11 @@ public class Submission {
     @com.fasterxml.jackson.annotation.JsonGetter("reportCategory")
     public String getReportCategoryForJson() {
         return reportCategory != null ? reportCategory.toUpperCase() : null;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("academicYear")
+    public String getAcademicYearForJson() {
+        return academicYear != null ? academicYear : auditCycle;
     }
 
     @com.fasterxml.jackson.annotation.JsonGetter("hasNextCycle")
