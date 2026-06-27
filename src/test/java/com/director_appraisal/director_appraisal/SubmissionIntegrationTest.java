@@ -427,14 +427,14 @@ public class SubmissionIntegrationTest {
                 .version(1)
                 .hasNextCycle(false)
                 .build();
-        sub = submissionRepository.save(sub);
+        final Submission savedSub = submissionRepository.save(sub);
 
         List<Submission> list = submissionController.getAllSubmissions().getBody();
         assertNotNull(list);
         assertFalse(list.isEmpty());
 
         Submission returned = list.stream()
-                .filter(s -> s.getId().equals(sub.getId()))
+                .filter(s -> s.getId().equals(savedSub.getId()))
                 .findFirst()
                 .orElseThrow();
 

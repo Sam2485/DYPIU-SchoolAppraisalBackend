@@ -146,7 +146,6 @@ class SubmissionServiceTest {
                 .build();
 
         when(submissionRepository.findByIdForUpdate(123L)).thenReturn(Optional.of(source));
-        when(submissionRepository.findMaxVersionInLineage(123L)).thenReturn(1);
         when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> {
             Submission saved = invocation.getArgument(0);
             saved.setId(124L);
