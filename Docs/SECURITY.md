@@ -35,7 +35,6 @@ The system maps authorization checks dynamically using standard user roles.
 
 ### Endpoint Rules & Authorization Matrix:
 - `/api/auth/**`: Allowed publicly without token.
-- `/h2-console/**`: Allowed publicly (H2 console bypass).
 - `/uploads/**`: Allowed publicly (serves local static media assets).
 - `/api/submissions/all`: Secured via **Method-Level Security** (`@PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC', 'ROLE_ACADEMIC-INTERNAL-AUDITOR', 'ROLE_ACADEMIC-EXTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-INTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-EXTERNAL-AUDITOR')")`). Only VC, IQAC, or assigned/matched auditors can query all submissions. Submissions lists are filtered based on the calling user's role:
   - **IQAC**: returns forms with status in `SUBMITTED`, `UNDER_REVIEW`, `AUDITOR_COMPLETED`, `APPROVED`, `SENT_BACK`.
@@ -102,10 +101,13 @@ To allow seamless connection with frontends (e.g., Vite/React developer servers 
 ---
 
 ## 5. Password Reset Security
-To protect user accounts from token harvesting (if the database is compromised), the system secures reset tokens using a one-way hashing design:
+To protect user accounts from token harvesting, the system secures reset tokens using a one-way hashing design and conditional response protection:
 1. **Token Generation:** The system generates a cryptographically secure random UUID token (`rawToken`) when a user requests a password reset.
 2. **One-Way Hashing:** The system hashes the `rawToken` using `SHA-256` before writing the hash value to the `password_reset_tokens` table.
-3. **Verification:** When the user clicks the reset link in their email and submits a new password, the system hashes the token parameter received from the client and queries the database using the hash. 
-This prevents database-read access from compromising active tokens since the raw tokens are never written to disk.
+3. **Verification:** When the user clicks the reset link in their email and submits a new password, the system hashes the token parameter received from the client and queries the database using the hash. This prevents database-read access from compromising active tokens since the raw tokens are never written to disk.
 4. **Token Clean-up:** The system automatically purges expired or old reset tokens associated with the target email whenever a new reset request is made.
+5. **Conditional Response Hardening (Production vs Development):**
+   - **GCP Production Mode (`app.gcp.enabled=true`):** The raw token is strictly omitted from the API response payload in `/forgot-password`. Users must rely solely on the reset link received in their email.
+   - **Local Development Mode (`app.gcp.enabled=false`):** The raw token is returned inside the HTTP response under the `"token"` key to facilitate testing and mock mailer integration without requiring active mailbox configuration.
+
 

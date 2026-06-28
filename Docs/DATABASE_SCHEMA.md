@@ -139,3 +139,21 @@ Each of these tables maps to:
 ## 3. Database Migrations
 Migrations are baseline managed inside the directory `src/main/resources/db/migration`:
 - **V1__init_schema.sql**: Declares DDL for core tables (including `users`, `submissions`, `snapshots`, and `password_reset_tokens`) and all 64 child audit tables with clean cascade constraints.
+- **V2__add_auditor_fields.sql**: Adds columns for forwarding submissions to single auditors.
+- **V3__ensure_auditor_fields_exist.sql**: Ensures the forwarding columns are correctly defined.
+- **V4__add_submission_report_version_fields.sql**: Adds support for versions, next versions, parent-child links, and root submission history indexing.
+- **V5__add_next_cycle_fields.sql**: Adds indicators to track if a submission has a successor audit cycle.
+- **V6__add_academic_years_and_auditor_assignments.sql**: Adds the `academic_years` table, `submission_auditor_assignments` junction table, and composite key constraints.
+- **V7__add_attachment_school_group_and_auditor_posts.sql**: Adds `school_group`, `administrative_post`, and JSON columns for multi-auditor routing.
+- **V8__add_administrative_attachment_columns.sql**: Adds section-specific attachment tracking columns.
+- **V9__add_indexes.sql**: Configures performance-optimizing database indexes on highly queried fields to avoid full-table scans.
+
+---
+
+## 4. Query Performance Indexes (Added in V9)
+The following database indexes are configured to optimize lookup times under load:
+1. `idx_submissions_email_audit_type_year`: Composite index on `public.submissions(email, audit_type, academic_year)` to speed up status lookups, history fetches, and draft check queries.
+2. `idx_submissions_status`: B-tree index on `public.submissions(status)` to optimize reviewer/IQAC dashboard queries.
+3. `idx_submissions_root_parent_id`: B-tree index on `public.submissions(root_submission_id, parent_submission_id)` to speed up version history and lineage fetches.
+4. `idx_users_role` / `idx_users_status`: B-tree indexes on `public.users(role)` and `public.users(status)` to optimize authority verification.
+
