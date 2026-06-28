@@ -7,8 +7,8 @@ WORKDIR /app
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
-COPY src ./src
-RUN mvn package -DskipTests -B
+COPY src/main ./src/main
+RUN mvn package -DskipTests -Dmaven.test.skip=true -B
 
 # =============================================================================
 # Stage 2 — Lean JRE runtime image
