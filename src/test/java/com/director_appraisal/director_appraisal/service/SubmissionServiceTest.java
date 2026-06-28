@@ -381,8 +381,8 @@ class SubmissionServiceTest {
                 .attachments("[]")
                 .build();
         User owner = User.builder()
-                .email("registrar@dypiu.ac.in")
-                .role("administrative")
+                .email("iqac@dypiu.ac.in")
+                .role("iqac")
                 .build();
         String tablesData = "{\"scholarshipSummary\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"summary.pdf\",\"url\":\"/uploads/users/abc/attachments/summary.pdf\"}]}]," +
                 "\"scholarshipStudents\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"student.pdf\",\"url\":\"/uploads/users/abc/attachments/student.pdf\"}]}]," +
@@ -433,6 +433,7 @@ class SubmissionServiceTest {
         User owner = User.builder()
                 .email("registrar@dypiu.ac.in")
                 .role("administrative")
+                .post("registrar")
                 .build();
         String newTablesData = "{\"scholarshipSummary\":[{\"Attachment\":[{\"fileName\":\"kept.pdf\",\"url\":\"/uploads/users/abc/attachments/kept.pdf\"}]}]}";
 
@@ -473,6 +474,7 @@ class SubmissionServiceTest {
         User owner = User.builder()
                 .email("registrar@dypiu.ac.in")
                 .role("administrative")
+                .post("Registrar")
                 .build();
         String invalidTablesData = "{\"scholarshipSummary\":[{\"Attachment\":[{\"fileName\":\"bad.docx\",\"url\":\"/uploads/users/abc/attachments/bad.docx\"}]}]}";
 
@@ -492,5 +494,120 @@ class SubmissionServiceTest {
                 null
         ));
         verify(submissionRepository, never()).save(any(Submission.class));
+    }
+
+    @Test
+    void registrarCanEditPartAAndPartCButNotPartBOrPartDOrPartE() {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("registrar@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User registrar = User.builder()
+                .email("registrar@dypiu.ac.in")
+                .role("administrative")
+                .post("registrar")
+                .build();
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission updated = submissionService.updateSubmission(
+                123L,
+                registrar,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "{\"schoolName\":\"Administrative Office\"}",
+                "{\"scholarshipSummary\":[{\"srNo\":\"1\"}],\"statutoryBodies\":[{\"srNo\":\"1\"}]}",
+                null
+        );
+        assertTrue(updated.getTablesData().contains("scholarshipSummary"));
+        assertTrue(updated.getTablesData().contains("statutoryBodies"));
+
+        assertThrows(SecurityException.class, () -> submissionService.updateSubmission(
+                123L,
+                registrar,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "{\"facultyInformation\":[{\"srNo\":\"1\"}]}",
+                null
+        ));
+        assertThrows(SecurityException.class, () -> submissionService.updateSubmission(
+                123L,
+                registrar,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "{\"hackathons\":[{\"srNo\":\"1\"}]}",
+                null
+        ));
+        assertThrows(SecurityException.class, () -> submissionService.updateSubmission(
+                123L,
+                registrar,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "{\"partESchools\":[{\"schoolCode\":\"SOCSEA\"}]}",
+                null,
+                null
+        ));
+    }
+
+    @Test
+    void independentAdministrativePostSubmissionProgressControlsGlobalStatus() {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("registrar@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"SUBMITTED\",\"dean-student-welfare\":\"SUBMITTED\",\"dean-placement\":\"SUBMITTED\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User registrar = User.builder()
+                .email("registrar@dypiu.ac.in")
+                .role("administrative")
+                .post("registrar")
+                .build();
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission submitted = submissionService.updateSubmission(
+                123L,
+                registrar,
+                "SUBMITTED",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "{\"schoolName\":\"Administrative Office\"}",
+                "{\"scholarshipSummary\":[{\"srNo\":\"1\"}]}",
+                null
+        );
+
+        assertEquals("SUBMITTED", submitted.getStatus());
+        assertTrue(submitted.getValuesData().contains("\"registrar\":\"SUBMITTED\""));
     }
 }

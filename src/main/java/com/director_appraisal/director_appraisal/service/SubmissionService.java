@@ -34,6 +34,7 @@ public class SubmissionService {
     private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED");
+    private static final List<String> ADMIN_POSTS = List.of("registrar", "hr", "dean-student-welfare", "dean-placement");
 
     private final SubmissionRepository submissionRepository;
     private final SnapshotRepository snapshotRepository;
@@ -98,8 +99,9 @@ public class SubmissionService {
         submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
         String preparedAttachments = deduplicateAttachmentMetadataJson(attachments);
-        submission.setValuesData(valuesData);
-        submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        AdministrativePayload administrativePayload = prepareAdministrativePayload(submission, resolveUser(email), valuesData, tablesData, preparedAttachments, false);
+        submission.setValuesData(administrativePayload.valuesData());
+        submission.setTablesData(prepareTablesDataUpdate(submission, administrativePayload.tablesData(), preparedAttachments));
         submission.setAttachments(preparedAttachments);
         applySubmissionDefaults(submission);
         ensureVersion(submission);
@@ -125,11 +127,21 @@ public class SubmissionService {
         submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
         String preparedAttachments = deduplicateAttachmentMetadataJson(attachments);
-        submission.setValuesData(valuesData);
-        submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        AdministrativePayload administrativePayload = prepareAdministrativePayload(submission, resolveUser(email), valuesData, tablesData, preparedAttachments, true);
+        submission.setValuesData(administrativePayload.valuesData());
+        submission.setTablesData(prepareTablesDataUpdate(submission, administrativePayload.tablesData(), preparedAttachments));
         submission.setAttachments(preparedAttachments);
-        submission.setStatus("SUBMITTED");
-        submission.setSubmittedAt(LocalDateTime.now());
+        if (administrativePayload.administrativePartial()) {
+            if (administrativePayload.allAdministrativePostsSubmitted()) {
+                submission.setStatus("SUBMITTED");
+                submission.setSubmittedAt(LocalDateTime.now());
+            } else {
+                submission.setStatus("DRAFT");
+            }
+        } else {
+            submission.setStatus("SUBMITTED");
+            submission.setSubmittedAt(LocalDateTime.now());
+        }
         applySubmissionDefaults(submission);
         ensureRootSubmissionId(submission);
         ensureVersion(submission);
@@ -160,8 +172,9 @@ public class SubmissionService {
         submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
         String preparedAttachments = deduplicateAttachmentMetadataJson(attachments);
-        submission.setValuesData(valuesData);
-        submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        AdministrativePayload administrativePayload = prepareAdministrativePayload(submission, resolveUser(email), valuesData, tablesData, preparedAttachments, false);
+        submission.setValuesData(administrativePayload.valuesData());
+        submission.setTablesData(prepareTablesDataUpdate(submission, administrativePayload.tablesData(), preparedAttachments));
         submission.setAttachments(preparedAttachments);
         applySubmissionDefaults(submission);
         ensureVersion(submission);
@@ -545,8 +558,10 @@ public class SubmissionService {
         boolean isIqac = "iqac".equals(callerRole);
         boolean isAuditor = callerRole.contains("auditor") || "auditor".equalsIgnoreCase(caller.getAccountType());
         boolean isAssignedAuditor = isAuditor && (isAuditorAssigned(caller, submission) || isAuditorFallbackMatch(caller, submission));
+        boolean isAdministrativeContributor = "administrative".equals(callerRole)
+                && "administrative".equalsIgnoreCase(submission.getAuditType());
 
-        if (!isOwner && !isIqac && !isAssignedAuditor) {
+        if (!isOwner && !isIqac && !isAssignedAuditor && !isAdministrativeContributor) {
             throw new IllegalStateException("You are not authorized to edit this submission");
         }
 
@@ -632,9 +647,20 @@ public class SubmissionService {
         }
 
         String preparedAttachments = attachments != null ? deduplicateAttachmentMetadataJson(attachments) : submission.getAttachments();
-        if (valuesData != null) submission.setValuesData(valuesData);
-        if (tablesData != null) submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        AdministrativePayload administrativePayload = prepareAdministrativePayload(submission, caller, valuesData, tablesData, preparedAttachments, "SUBMITTED".equalsIgnoreCase(status));
+        if (valuesData != null || (administrativePayload.administrativePartial() && "SUBMITTED".equalsIgnoreCase(status))) {
+            submission.setValuesData(administrativePayload.valuesData());
+        }
+        if (tablesData != null) submission.setTablesData(prepareTablesDataUpdate(submission, administrativePayload.tablesData(), preparedAttachments));
         if (attachments != null) submission.setAttachments(preparedAttachments);
+        if (administrativePayload.administrativePartial() && "SUBMITTED".equalsIgnoreCase(status)) {
+            if (administrativePayload.allAdministrativePostsSubmitted()) {
+                submission.setStatus("SUBMITTED");
+                submission.setSubmittedAt(LocalDateTime.now());
+            } else {
+                submission.setStatus("DRAFT");
+            }
+        }
 
         applySubmissionDefaults(submission);
         ensureVersion(submission);
@@ -954,6 +980,247 @@ public class SubmissionService {
             }
             submission.setSchoolGroup(group);
         }
+    }
+
+    private User resolveUser(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return userRepository.findByEmail(email).orElse(null);
+    }
+
+    private AdministrativePayload prepareAdministrativePayload(Submission submission, User caller, String incomingValuesData,
+                                                               String incomingTablesData, String effectiveAttachments,
+                                                               boolean submittingContribution) {
+        if (!isAdministrativeSectionUser(caller, submission)) {
+            return new AdministrativePayload(
+                    incomingValuesData != null ? incomingValuesData : submission.getValuesData(),
+                    incomingTablesData != null ? incomingTablesData : submission.getTablesData(),
+                    false,
+                    false
+            );
+        }
+
+        String post = canonicalAdministrativePost(caller.getPost());
+        if (post == null) {
+            throw new SecurityException("Administrative post is required");
+        }
+
+        java.util.Set<String> ownedSections = ownedAdministrativeSections(post);
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode existingValues = objectNodeOrEmpty(mapper, submission.getValuesData());
+            boolean alreadySubmitted = isAdministrativePostSubmitted(existingValues, post);
+            if (alreadySubmitted && hasOwnedAdministrativeChanges(existingValues, incomingValuesData, this::classifyAdministrativeValueSection, ownedSections)) {
+                throw new SecurityException("This administrative section has already been submitted");
+            }
+            if (alreadySubmitted && hasOwnedAdministrativeChanges(objectNodeOrEmpty(mapper, submission.getTablesData()), incomingTablesData, this::classifyAdministrativeTableSection, ownedSections)) {
+                throw new SecurityException("This administrative section has already been submitted");
+            }
+
+            com.fasterxml.jackson.databind.node.ObjectNode mergedValues = mergeAdministrativeJson(
+                    mapper,
+                    submission.getValuesData(),
+                    incomingValuesData,
+                    this::classifyAdministrativeValueSection,
+                    ownedSections,
+                    "valuesData"
+            );
+            com.fasterxml.jackson.databind.node.ObjectNode mergedTables = mergeAdministrativeJson(
+                    mapper,
+                    submission.getTablesData(),
+                    incomingTablesData,
+                    this::classifyAdministrativeTableSection,
+                    ownedSections,
+                    "tablesData"
+            );
+
+            com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, mergedValues);
+            if (submittingContribution) {
+                progress.put(post, "SUBMITTED");
+            }
+            mergedValues.set("administrativeProgress", progress);
+            boolean allSubmitted = ADMIN_POSTS.stream()
+                    .allMatch(requiredPost -> "SUBMITTED".equalsIgnoreCase(progress.path(requiredPost).asText("DRAFT")));
+
+            String mergedValuesJson = mapper.writeValueAsString(mergedValues);
+            String mergedTablesJson = mapper.writeValueAsString(mergedTables);
+            return new AdministrativePayload(mergedValuesJson, mergedTablesJson, true, allSubmitted);
+        } catch (SecurityException | IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Administrative payload must be valid JSON", e);
+        }
+    }
+
+    private boolean isAdministrativeSectionUser(User caller, Submission submission) {
+        return caller != null
+                && "administrative".equalsIgnoreCase(caller.getRole())
+                && submission != null
+                && "administrative".equalsIgnoreCase(submission.getAuditType());
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode objectNodeOrEmpty(ObjectMapper mapper, String json) throws java.io.IOException {
+        if (json == null || json.isBlank()) {
+            return mapper.createObjectNode();
+        }
+        com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(json);
+        if (node == null || node.isNull()) {
+            return mapper.createObjectNode();
+        }
+        if (!node.isObject()) {
+            throw new IllegalArgumentException("Administrative payload must be a JSON object");
+        }
+        return (com.fasterxml.jackson.databind.node.ObjectNode) node.deepCopy();
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode mergeAdministrativeJson(ObjectMapper mapper, String existingJson,
+                                                                                  String incomingJson,
+                                                                                  java.util.function.Function<String, String> sectionClassifier,
+                                                                                  java.util.Set<String> ownedSections,
+                                                                                  String payloadName) throws java.io.IOException {
+        com.fasterxml.jackson.databind.node.ObjectNode merged = objectNodeOrEmpty(mapper, existingJson);
+        if (incomingJson == null) {
+            return merged;
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode incoming = objectNodeOrEmpty(mapper, incomingJson);
+        incoming.fields().forEachRemaining(entry -> {
+            if ("administrativeProgress".equals(entry.getKey())) {
+                return;
+            }
+            String section = sectionClassifier.apply(entry.getKey());
+            if (ownedSections.contains(section)) {
+                merged.set(entry.getKey(), entry.getValue());
+                return;
+            }
+            com.fasterxml.jackson.databind.JsonNode existingValue = merged.get(entry.getKey());
+            if (existingValue != null && existingValue.equals(entry.getValue())) {
+                return;
+            }
+            if (existingValue == null && (entry.getValue() == null || entry.getValue().isNull()
+                    || (entry.getValue().isObject() && entry.getValue().size() == 0)
+                    || (entry.getValue().isArray() && entry.getValue().size() == 0))) {
+                return;
+            }
+            throw new SecurityException("Unauthorized " + payloadName + " modification for section " + section);
+        });
+        return merged;
+    }
+
+    private boolean hasOwnedAdministrativeChanges(com.fasterxml.jackson.databind.node.ObjectNode existing, String incomingJson,
+                                                  java.util.function.Function<String, String> sectionClassifier,
+                                                  java.util.Set<String> ownedSections) throws java.io.IOException {
+        if (incomingJson == null || incomingJson.isBlank()) {
+            return false;
+        }
+        ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode incoming = objectNodeOrEmpty(mapper, incomingJson);
+        java.util.Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = incoming.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> entry = fields.next();
+            if ("administrativeProgress".equals(entry.getKey())) {
+                continue;
+            }
+            if (!ownedSections.contains(sectionClassifier.apply(entry.getKey()))) {
+                continue;
+            }
+            com.fasterxml.jackson.databind.JsonNode existingValue = existing.get(entry.getKey());
+            if (existingValue == null || !existingValue.equals(entry.getValue())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode administrativeProgressNode(ObjectMapper mapper,
+                                                                                     com.fasterxml.jackson.databind.node.ObjectNode values) {
+        com.fasterxml.jackson.databind.JsonNode existing = values.get("administrativeProgress");
+        com.fasterxml.jackson.databind.node.ObjectNode progress = existing != null && existing.isObject()
+                ? (com.fasterxml.jackson.databind.node.ObjectNode) existing.deepCopy()
+                : mapper.createObjectNode();
+        ADMIN_POSTS.forEach(post -> {
+            if (!progress.has(post)) {
+                progress.put(post, "DRAFT");
+            }
+        });
+        return progress;
+    }
+
+    private boolean isAdministrativePostSubmitted(com.fasterxml.jackson.databind.node.ObjectNode values, String post) {
+        com.fasterxml.jackson.databind.JsonNode progress = values.get("administrativeProgress");
+        return progress != null && "SUBMITTED".equalsIgnoreCase(progress.path(post).asText());
+    }
+
+    private java.util.Set<String> ownedAdministrativeSections(String post) {
+        return switch (post) {
+            case "registrar" -> java.util.Set.of("A", "C");
+            case "hr" -> java.util.Set.of("B");
+            case "dean-student-welfare" -> java.util.Set.of("D");
+            case "dean-placement" -> java.util.Set.of("E");
+            default -> throw new SecurityException("Invalid administrative post");
+        };
+    }
+
+    private String classifyAdministrativeTableSection(String key) {
+        String normalized = normalizeJsonKey(key);
+        if (normalized.contains("faculty") || normalized.contains("staff")) {
+            return "B";
+        }
+        if (normalized.contains("statutory") || normalized.contains("infrastructure") || normalized.contains("library")
+                || normalized.contains("eresource") || normalized.contains("it") || normalized.contains("sportsfacilities")
+                || normalized.contains("divyangajan") || normalized.contains("researchresource")) {
+            return "C";
+        }
+        if (normalized.contains("hackathon") || normalized.contains("cultural") || normalized.contains("sportsactivities")
+                || normalized.contains("community") || normalized.contains("adminstudentawards")
+                || normalized.contains("awardsprizesrecognitions")) {
+            return "D";
+        }
+        if (normalized.contains("trainingactivities") || normalized.contains("industrycollaborations")
+                || normalized.contains("placement")) {
+            return "E";
+        }
+        return "A";
+    }
+
+    private String classifyAdministrativeValueSection(String key) {
+        String normalized = normalizeJsonKey(key);
+        if (normalized.contains("partb") || normalized.contains("hr") || normalized.contains("faculty") || normalized.contains("staff")) {
+            return "B";
+        }
+        if (normalized.contains("partc") || normalized.contains("infrastructure") || normalized.contains("statutory")
+                || normalized.contains("library") || normalized.contains("researchresource")) {
+            return "C";
+        }
+        if (normalized.contains("partd") || normalized.contains("hackathon") || normalized.contains("cultural")
+                || normalized.contains("sports") || normalized.contains("community") || normalized.contains("award")
+                || normalized.contains("recognition")) {
+            return "D";
+        }
+        if (normalized.contains("parte") || normalized.contains("placement") || normalized.contains("parteschools")
+                || normalized.contains("trainingactivities") || normalized.contains("industrycollaboration")) {
+            return "E";
+        }
+        return "A";
+    }
+
+    public String canonicalAdministrativePost(String post) {
+        if (post == null || post.isBlank()) {
+            return null;
+        }
+        String normalized = post.trim().toLowerCase().replace("_", "-");
+        normalized = normalized.replaceAll("\\s+", "-");
+        return switch (normalized) {
+            case "registrar" -> "registrar";
+            case "hr", "human-resources", "human-resource" -> "hr";
+            case "dsw", "student-welfare", "dean-student-welfare", "dean-of-student-welfare" -> "dean-student-welfare";
+            case "dean-placement", "placement", "dean-of-placement" -> "dean-placement";
+            default -> normalized;
+        };
+    }
+
+    private record AdministrativePayload(String valuesData, String tablesData, boolean administrativePartial,
+                                         boolean allAdministrativePostsSubmitted) {
     }
 
     private String deduplicateAttachmentMetadataJson(String json) {

@@ -174,6 +174,8 @@ public class SubmissionController {
         boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
         boolean isVc = "vice-chancellor".equalsIgnoreCase(user.getRole());
         boolean isAuditor = user.getRole().toLowerCase().contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType());
+        boolean isAdministrativeContributor = "administrative".equalsIgnoreCase(user.getRole())
+                && "administrative".equalsIgnoreCase(submission.getAuditType());
         
         boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
@@ -184,7 +186,7 @@ public class SubmissionController {
             }
         }
 
-        if (!isOwner && !isIqac && !isVc && !isAssignedAuditor) {
+        if (!isOwner && !isIqac && !isVc && !isAssignedAuditor && !isAdministrativeContributor) {
             return ResponseEntity.status(403).build();
         }
 
@@ -240,10 +242,12 @@ public class SubmissionController {
         boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
         boolean isVc = "vice-chancellor".equalsIgnoreCase(user.getRole());
         boolean isAuditor = user.getRole().toLowerCase().contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType());
+        boolean isAdministrativeContributor = "administrative".equalsIgnoreCase(user.getRole())
+                && "administrative".equalsIgnoreCase(submission.getAuditType());
         
         boolean isAssignedAuditor = isAuditor && (submissionService.isAuditorAssigned(user, submission) || submissionService.isAuditorFallbackMatch(user, submission));
 
-        if (!isOwner && !isIqac && !isVc && !isAssignedAuditor) {
+        if (!isOwner && !isIqac && !isVc && !isAssignedAuditor && !isAdministrativeContributor) {
             return ResponseEntity.status(403).build();
         }
 

@@ -39,6 +39,7 @@ public class AuthController {
         String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
 
         java.util.List<String> administrativePosts = getAdministrativePosts(user);
+        String canonicalPost = canonicalAdministrativePost(user.getPost());
 
         // Generate JWT Token
         String token = jwtService.generateToken(user, Map.of(
@@ -46,6 +47,7 @@ public class AuthController {
                 "designation", user.getDesignation(),
                 "school", user.getSchool(),
                 "role", user.getRole(),
+                "post", canonicalPost,
                 "currentAcademicYear", currentAcademicYear,
                 "administrativePosts", administrativePosts
         ));
@@ -63,7 +65,7 @@ public class AuthController {
                 user.getCategory(),
                 user.getAuditorType(),
                 user.getAuditorRole(),
-                user.getPost(),
+                canonicalPost,
                 currentAcademicYear,
                 administrativePosts
         ));
@@ -139,13 +141,30 @@ public class AuthController {
         }
         java.util.List<String> posts = userAdministrativePostRepository.findByUserId(user.getId()).stream()
                 .map(UserAdministrativePost::getPost)
+                .map(this::canonicalAdministrativePost)
+                .filter(post -> post != null && !post.isBlank())
                 .toList();
         if (!posts.isEmpty()) {
             return posts;
         }
         if ("administrative".equalsIgnoreCase(user.getCategory()) && user.getPost() != null) {
-            return java.util.List.of(user.getPost());
+            String canonicalPost = canonicalAdministrativePost(user.getPost());
+            return canonicalPost != null ? java.util.List.of(canonicalPost) : java.util.List.of();
         }
         return java.util.List.of();
+    }
+
+    private String canonicalAdministrativePost(String post) {
+        if (post == null || post.isBlank()) {
+            return null;
+        }
+        String normalized = post.trim().toLowerCase().replace("_", "-").replaceAll("\\s+", "-");
+        return switch (normalized) {
+            case "registrar" -> "registrar";
+            case "hr", "human-resources", "human-resource" -> "hr";
+            case "dsw", "student-welfare", "dean-student-welfare", "dean-of-student-welfare" -> "dean-student-welfare";
+            case "dean-placement", "placement", "dean-of-placement" -> "dean-placement";
+            default -> normalized;
+        };
     }
 }

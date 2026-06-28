@@ -411,7 +411,7 @@ public class UserController {
         response.put("role", role);
         response.put("school", user.getSchool());
         response.put("designation", user.getDesignation());
-        response.put("post", user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null));
+        response.put("post", canonicalAdministrativePost(user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null)));
         response.put("administrativePosts", getAdministrativePosts(user));
         
         response.put("accountType", accountType);
@@ -462,6 +462,8 @@ public class UserController {
         }
         List<String> posts = userAdministrativePostRepository.findByUserId(user.getId()).stream()
                 .map(UserAdministrativePost::getPost)
+                .map(this::canonicalAdministrativePost)
+                .filter(post -> post != null && !post.isBlank())
                 .toList();
         if (!posts.isEmpty()) {
             return posts;
@@ -469,10 +471,12 @@ public class UserController {
         String role = normalize(user.getRole());
         String accountType = normalize(user.getAccountType());
         if ("auditor".equals(accountType) && "administrative".equals(normalize(user.getCategory())) && user.getPost() != null) {
-            return List.of(user.getPost());
+            String post = canonicalAdministrativePost(user.getPost());
+            return post != null ? List.of(post) : List.of();
         }
         if ("administrative".equals(role) && user.getPost() != null) {
-            return List.of(user.getPost());
+            String post = canonicalAdministrativePost(user.getPost());
+            return post != null ? List.of(post) : List.of();
         }
         return List.of();
     }
@@ -503,6 +507,20 @@ public class UserController {
 
     private String normalize(String value) {
         return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String canonicalAdministrativePost(String post) {
+        if (post == null || post.isBlank()) {
+            return null;
+        }
+        String normalized = post.trim().toLowerCase(Locale.ROOT).replace("_", "-").replaceAll("\\s+", "-");
+        return switch (normalized) {
+            case "registrar" -> "registrar";
+            case "hr", "human-resources", "human-resource" -> "hr";
+            case "dsw", "student-welfare", "dean-student-welfare", "dean-of-student-welfare" -> "dean-student-welfare";
+            case "dean-placement", "placement", "dean-of-placement" -> "dean-placement";
+            default -> normalized;
+        };
     }
 
     private String cleanPassword(String value) {
