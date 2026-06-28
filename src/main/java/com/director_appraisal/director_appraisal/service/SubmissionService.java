@@ -35,6 +35,7 @@ public class SubmissionService {
     private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED");
     private static final List<String> ADMIN_POSTS = List.of("registrar", "hr", "dean-student-welfare", "dean-placement");
+    private static final String SHARED_ADMINISTRATIVE_EMAIL = "administrative.shared@dypiu.ac.in";
 
     private final SubmissionRepository submissionRepository;
     private final SnapshotRepository snapshotRepository;
@@ -44,6 +45,144 @@ public class SubmissionService {
     private final AcademicYearService academicYearService;
     private final UserAdministrativePostRepository userAdministrativePostRepository;
     private final AttachmentService attachmentService;
+
+    @Transactional
+    public Submission getOrCreateSharedAdministrativeDraft(User caller) {
+        if (caller == null || !"administrative".equalsIgnoreCase(caller.getRole())) {
+            throw new SecurityException("Only administrative authorities can access the shared administrative form");
+        }
+        String academicYear = academicYearService.getCurrentAcademicYearLabel();
+        Optional<Submission> existing = submissionRepository.findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(
+                SHARED_ADMINISTRATIVE_EMAIL, "administrative", academicYear);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        Submission submission = Submission.builder()
+                .email(SHARED_ADMINISTRATIVE_EMAIL)
+                .auditType("administrative")
+                .school("Administrative Office")
+                .submittedBy("Administrative Authorities")
+                .status("DRAFT")
+                .valuesData(defaultSharedAdministrativeValuesData())
+                .tablesData(defaultSharedAdministrativeTablesData())
+                .attachments("[]")
+                .academicYear(academicYear)
+                .auditCycle(toAuditCycle(academicYear))
+                .reportCategory("INTERNAL")
+                .version(1)
+                .hasNextCycle(false)
+                .build();
+        Submission saved = submissionRepository.save(submission);
+        saved.setRootSubmissionId(saved.getId());
+        return submissionRepository.save(saved);
+    }
+
+    @Transactional
+    public Submission saveSharedAdministrativeContribution(User caller, String contributorPost, List<String> sections,
+                                                          String valuesData, String tablesData, String attachments,
+                                                          boolean submitContribution) {
+        Submission submission = getOrCreateSharedAdministrativeDraft(caller);
+        return mergeSharedAdministrativeContribution(submission.getId(), caller,
+                submitContribution ? "APPROVE_CONTRIBUTION" : null,
+                contributorPost, sections, valuesData, tablesData, attachments);
+    }
+
+    @Transactional
+    public Submission updateSharedAdministrativeContribution(Long id, User caller, String action, String contributorPost,
+                                                            List<String> sections, String valuesData,
+                                                            String tablesData, String attachments) {
+        return mergeSharedAdministrativeContribution(id, caller, action, contributorPost, sections, valuesData, tablesData, attachments);
+    }
+
+    private Submission mergeSharedAdministrativeContribution(Long id, User caller, String action, String contributorPost,
+                                                            List<String> sections, String valuesData,
+                                                            String tablesData, String attachments) {
+        Submission submission = submissionRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
+        if (!SHARED_ADMINISTRATIVE_EMAIL.equalsIgnoreCase(submission.getEmail())
+                || !"administrative".equalsIgnoreCase(submission.getAuditType())) {
+            throw new IllegalArgumentException("Submission is not the shared administrative form");
+        }
+        if (!"DRAFT".equalsIgnoreCase(submission.getStatus())) {
+            throw new SecurityException("Shared administrative form is locked");
+        }
+
+        String callerPost = canonicalAdministrativePost(caller.getPost());
+        String requestedPost = canonicalAdministrativePost(contributorPost);
+        if (requestedPost == null) {
+            requestedPost = callerPost;
+        }
+        if (callerPost == null || !callerPost.equals(requestedPost)) {
+            throw new SecurityException("contributorPost does not match authenticated user");
+        }
+
+        java.util.Set<String> declaredSections = normalizeDeclaredSections(sections);
+        java.util.Set<String> ownedSections = ownedAdministrativeSections(callerPost);
+        if (declaredSections.isEmpty()) {
+            declaredSections = ownedSections;
+        }
+        if (!ownedSections.containsAll(declaredSections)) {
+            throw new SecurityException("User is not authorized for one or more declared sections");
+        }
+
+        boolean approving = "APPROVE_CONTRIBUTION".equalsIgnoreCase(action);
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode existingValues = objectNodeOrEmpty(mapper, submission.getValuesData());
+            com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, existingValues);
+            if (approving && "APPROVED".equalsIgnoreCase(progress.path(callerPost).asText())) {
+                throw new ConflictException("Contribution has already been approved");
+            }
+            if ("APPROVED".equalsIgnoreCase(progress.path(callerPost).asText())) {
+                throw new SecurityException("Approved contribution is locked");
+            }
+
+            com.fasterxml.jackson.databind.node.ObjectNode mergedValues = mergeAdministrativeJson(
+                    mapper,
+                    submission.getValuesData(),
+                    valuesData,
+                    this::classifyAdministrativeValueSection,
+                    declaredSections,
+                    "valuesData"
+            );
+            com.fasterxml.jackson.databind.node.ObjectNode mergedTables = mergeAdministrativeJson(
+                    mapper,
+                    submission.getTablesData(),
+                    tablesData,
+                    this::classifyAdministrativeTableSection,
+                    declaredSections,
+                    "tablesData"
+            );
+
+            progress = administrativeProgressNode(mapper, mergedValues);
+            progress.put(callerPost, approving ? "APPROVED" : "IN_PROGRESS");
+            mergedValues.set("administrativeProgress", progress);
+            if (approving) {
+                addAdministrativeApproval(mapper, mergedValues, callerPost, caller);
+            }
+
+            String preparedAttachments = mergeAttachmentMetadata(submission.getAttachments(), attachments);
+            submission.setValuesData(mapper.writeValueAsString(mergedValues));
+            submission.setTablesData(prepareTablesDataUpdate(submission, mapper.writeValueAsString(mergedTables), preparedAttachments));
+            submission.setAttachments(preparedAttachments);
+
+            boolean allApproved = ADMIN_POSTS.stream()
+                    .allMatch(post -> "APPROVED".equalsIgnoreCase(progress.path(post).asText("DRAFT")));
+            if (allApproved) {
+                submission.setStatus("SUBMITTED");
+                submission.setSubmittedAt(LocalDateTime.now());
+            }
+
+            Submission saved = submissionRepository.save(submission);
+            persistDataForStatus(saved);
+            return saved;
+        } catch (ConflictException | SecurityException | IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Shared administrative payload must be valid JSON", e);
+        }
+    }
 
     @Transactional
     public Submission getOrCreateDraft(String email, String auditType) {
@@ -982,6 +1121,129 @@ public class SubmissionService {
         }
     }
 
+    private String defaultSharedAdministrativeValuesData() {
+        ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
+        com.fasterxml.jackson.databind.node.ObjectNode progress = mapper.createObjectNode();
+        ADMIN_POSTS.forEach(post -> progress.put(post, "DRAFT"));
+        root.set("administrativeProgress", progress);
+        root.set("administrativeApprovals", mapper.createObjectNode());
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            return "{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"},\"administrativeApprovals\":{}}";
+        }
+    }
+
+    private String defaultSharedAdministrativeTablesData() {
+        ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
+        administrativeDefaultTableKeys().forEach(key -> {
+            com.fasterxml.jackson.databind.node.ArrayNode rows = mapper.createArrayNode();
+            com.fasterxml.jackson.databind.node.ObjectNode row = mapper.createObjectNode();
+            row.put("Sr No", "1");
+            rows.add(row);
+            root.set(key, rows);
+        });
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
+    private List<String> administrativeDefaultTableKeys() {
+        return List.of(
+                "studentStatistics",
+                "coursesOffered",
+                "scholarshipSummary",
+                "scholarshipStudents",
+                "facultyInformation",
+                "facultyTenure",
+                "facultyExperience",
+                "supportingStaff",
+                "staffTraining",
+                "buildingInfrastructure",
+                "libraryInfrastructure",
+                "eResources",
+                "itInfrastructure",
+                "sportsFacilities",
+                "divyangajanFacilities",
+                "researchResources",
+                "statutoryBodies",
+                "auditRecords",
+                "hackathons",
+                "culturalActivities",
+                "sportsActivities",
+                "communityActivities",
+                "adminStudentAwards",
+                "trainingActivities",
+                "industryCollaborations"
+        );
+    }
+
+    private java.util.Set<String> normalizeDeclaredSections(List<String> sections) {
+        if (sections == null || sections.isEmpty()) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> normalized = new java.util.HashSet<>();
+        for (String section : sections) {
+            if (section == null || section.isBlank()) {
+                continue;
+            }
+            String clean = section.trim().toUpperCase().replace("PART-", "").replace("PART_", "").replace("PART ", "");
+            if (!List.of("A", "B", "C", "D", "E").contains(clean)) {
+                throw new IllegalArgumentException("Invalid administrative section: " + section);
+            }
+            normalized.add(clean);
+        }
+        return normalized;
+    }
+
+    private void addAdministrativeApproval(ObjectMapper mapper, com.fasterxml.jackson.databind.node.ObjectNode values,
+                                           String post, User approver) {
+        com.fasterxml.jackson.databind.JsonNode existing = values.get("administrativeApprovals");
+        com.fasterxml.jackson.databind.node.ObjectNode approvals = existing != null && existing.isObject()
+                ? (com.fasterxml.jackson.databind.node.ObjectNode) existing.deepCopy()
+                : mapper.createObjectNode();
+        com.fasterxml.jackson.databind.node.ObjectNode approval = mapper.createObjectNode();
+        if (approver.getId() != null) {
+            approval.put("userId", approver.getId());
+        }
+        approval.put("name", approver.getName());
+        approval.put("post", post);
+        approval.put("email", approver.getEmail());
+        approval.put("approvedAt", LocalDateTime.now().toString());
+        approvals.set(post, approval);
+        values.set("administrativeApprovals", approvals);
+    }
+
+    private String mergeAttachmentMetadata(String existingJson, String incomingJson) {
+        String combined;
+        if (incomingJson == null || incomingJson.isBlank()) {
+            combined = existingJson;
+        } else if (existingJson == null || existingJson.isBlank() || "[]".equals(existingJson.trim())) {
+            combined = incomingJson;
+        } else {
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                com.fasterxml.jackson.databind.node.ArrayNode merged = mapper.createArrayNode();
+                com.fasterxml.jackson.databind.JsonNode existing = mapper.readTree(existingJson);
+                com.fasterxml.jackson.databind.JsonNode incoming = mapper.readTree(incomingJson);
+                if (existing.isArray()) {
+                    existing.forEach(merged::add);
+                }
+                if (incoming.isArray()) {
+                    incoming.forEach(merged::add);
+                }
+                combined = mapper.writeValueAsString(merged);
+            } catch (Exception e) {
+                combined = incomingJson;
+            }
+        }
+        return deduplicateAttachmentMetadataJson(combined);
+    }
+
     private User resolveUser(String email) {
         if (email == null || email.isBlank()) {
             return null;
@@ -1085,7 +1347,7 @@ public class SubmissionService {
         }
         com.fasterxml.jackson.databind.node.ObjectNode incoming = objectNodeOrEmpty(mapper, incomingJson);
         incoming.fields().forEachRemaining(entry -> {
-            if ("administrativeProgress".equals(entry.getKey())) {
+            if ("administrativeProgress".equals(entry.getKey()) || "administrativeApprovals".equals(entry.getKey())) {
                 return;
             }
             String section = sectionClassifier.apply(entry.getKey());
@@ -1118,7 +1380,7 @@ public class SubmissionService {
         java.util.Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = incoming.fields();
         while (fields.hasNext()) {
             Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> entry = fields.next();
-            if ("administrativeProgress".equals(entry.getKey())) {
+            if ("administrativeProgress".equals(entry.getKey()) || "administrativeApprovals".equals(entry.getKey())) {
                 continue;
             }
             if (!ownedSections.contains(sectionClassifier.apply(entry.getKey()))) {

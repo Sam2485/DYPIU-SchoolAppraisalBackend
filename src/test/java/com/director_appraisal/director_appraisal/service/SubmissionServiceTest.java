@@ -610,4 +610,94 @@ class SubmissionServiceTest {
         assertEquals("SUBMITTED", submitted.getStatus());
         assertTrue(submitted.getValuesData().contains("\"registrar\":\"SUBMITTED\""));
     }
+
+    @Test
+    void sharedAdministrativeDraftReturnsSameFormForDifferentAuthorities() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .academicYear("2025-2026")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User registrar = User.builder().role("administrative").post("registrar").build();
+        User hr = User.builder().role("administrative").post("hr").build();
+
+        when(academicYearService.getCurrentAcademicYearLabel()).thenReturn("2025-2026");
+        when(submissionRepository.findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(
+                "administrative.shared@dypiu.ac.in", "administrative", "2025-2026"))
+                .thenReturn(Optional.of(shared));
+
+        assertEquals(500L, submissionService.getOrCreateSharedAdministrativeDraft(registrar).getId());
+        assertEquals(500L, submissionService.getOrCreateSharedAdministrativeDraft(hr).getId());
+    }
+
+    @Test
+    void sharedAdministrativeRejectsUnauthorizedSectionUpdate() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User hr = User.builder().role("administrative").post("hr").build();
+
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+
+        assertThrows(SecurityException.class, () -> submissionService.updateSharedAdministrativeContribution(
+                500L,
+                hr,
+                null,
+                "hr",
+                List.of("B"),
+                null,
+                "{\"scholarshipSummary\":[{\"srNo\":\"1\"}]}",
+                "[]"
+        ));
+    }
+
+    @Test
+    void sharedAdministrativeApprovalMarksOnlyContributorApproved() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User registrar = User.builder()
+                .id(10L)
+                .email("registrar@dypiu.ac.in")
+                .name("Registrar")
+                .role("administrative")
+                .post("registrar")
+                .build();
+
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission updated = submissionService.updateSharedAdministrativeContribution(
+                500L,
+                registrar,
+                "APPROVE_CONTRIBUTION",
+                "registrar",
+                List.of("A", "C"),
+                "{\"schoolName\":\"Administrative Office\"}",
+                "{\"scholarshipSummary\":[{\"srNo\":\"1\"}],\"statutoryBodies\":[{\"srNo\":\"1\"}]}",
+                "[]"
+        );
+
+        assertEquals("DRAFT", updated.getStatus());
+        assertTrue(updated.getValuesData().contains("\"registrar\":\"APPROVED\""));
+        assertTrue(updated.getValuesData().contains("\"hr\":\"DRAFT\""));
+        assertTrue(updated.getValuesData().contains("\"administrativeApprovals\""));
+    }
 }

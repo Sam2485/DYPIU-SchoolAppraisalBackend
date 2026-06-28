@@ -119,4 +119,40 @@ public class Submission {
     public boolean getHasNextCycleForJson() {
         return hasNextCycle != null && hasNextCycle;
     }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("overallStatus")
+    public String getOverallStatusForJson() {
+        if (!"administrative".equalsIgnoreCase(auditType)) {
+            return status;
+        }
+        if ("SUBMITTED".equalsIgnoreCase(status)) {
+            return "SUBMITTED";
+        }
+        java.util.Map<String, String> progress = getAdministrativeProgressForJson();
+        boolean hasProgress = progress.values().stream().anyMatch(value -> !"DRAFT".equalsIgnoreCase(value));
+        return hasProgress ? "IN_PROGRESS" : "DRAFT";
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("administrativeProgress")
+    public java.util.Map<String, String> getAdministrativeProgressForJson() {
+        java.util.Map<String, String> progress = new java.util.LinkedHashMap<>();
+        progress.put("registrar", "DRAFT");
+        progress.put("hr", "DRAFT");
+        progress.put("dean-student-welfare", "DRAFT");
+        progress.put("dean-placement", "DRAFT");
+        if (valuesData == null || valuesData.isBlank()) {
+            return progress;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(valuesData)
+                    .get("administrativeProgress");
+            if (node != null && node.isObject()) {
+                progress.replaceAll((post, value) -> node.path(post).asText(value));
+            }
+        } catch (Exception ignored) {
+            return progress;
+        }
+        return progress;
+    }
 }

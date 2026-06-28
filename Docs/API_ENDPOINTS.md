@@ -377,3 +377,52 @@ Every generated relational table exposes standard endpoints for bulk updates.
 - **URL**: `/{table-name}/submission/{submissionId}`
 - **Method**: `DELETE`
 - **Response (200 OK)**: `200 OK` (Clear successful).
+# Shared Administrative Audit
+
+Administrative authorities use one shared form per academic year:
+
+```http
+GET /api/submissions/my-draft?auditType=administrative&shared=true
+```
+
+Partial save payload:
+
+```json
+{
+  "auditType": "administrative",
+  "sharedAdministrativeForm": true,
+  "contributorPost": "registrar",
+  "sections": ["A"],
+  "valuesData": "{}",
+  "tablesData": "{}",
+  "attachments": "[]"
+}
+```
+
+Contribution approval uses `PUT /api/submissions/{id}` with:
+
+```json
+{
+  "auditType": "administrative",
+  "sharedAdministrativeForm": true,
+  "action": "APPROVE_CONTRIBUTION",
+  "contributorPost": "registrar",
+  "sections": ["A", "C"],
+  "valuesData": "{}",
+  "tablesData": "{}",
+  "attachments": "[]"
+}
+```
+
+Section ownership:
+
+- Registrar: Part A, Part C
+- HR: Part B
+- Dean Student Welfare: Part D
+- Dean Placement: Part E
+
+ZIP download for all administrative contributors:
+
+```http
+GET /api/submissions/{id}/attachments/download?includeAllContributors=true
+```

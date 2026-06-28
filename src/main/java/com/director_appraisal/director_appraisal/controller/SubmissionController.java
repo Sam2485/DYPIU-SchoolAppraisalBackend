@@ -40,9 +40,14 @@ public class SubmissionController {
     }
 
     @GetMapping("/my-draft")
-    public ResponseEntity<Submission> getMyDraft(@RequestParam(required = false) String auditType) {
+    public ResponseEntity<Submission> getMyDraft(@RequestParam(required = false) String auditType,
+                                                 @RequestParam(required = false, defaultValue = "false") boolean shared) {
         String email = getCurrentUserEmail();
-        Submission draft = submissionService.getOrCreateDraft(email, normalizeAuditType(auditType));
+        User user = getCurrentUserDetails();
+        String normalizedAuditType = normalizeAuditType(auditType);
+        Submission draft = shared && "administrative".equals(normalizedAuditType)
+                ? submissionService.getOrCreateSharedAdministrativeDraft(user)
+                : submissionService.getOrCreateDraft(email, normalizedAuditType);
         return ResponseEntity.ok(draft);
     }
 
@@ -87,6 +92,10 @@ public class SubmissionController {
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         validateAuditTypeForRole(user.getRole(), auditType);
+        if (request.isSharedAdministrativeForm() && "administrative".equals(auditType)) {
+            return ResponseEntity.ok(submissionService.saveSharedAdministrativeContribution(user, request.getContributorPost(),
+                    request.getSections(), request.getValuesData(), request.getTablesData(), request.getAttachments(), false));
+        }
         Submission saved = submissionService.saveDraft(
                 email,
                 auditType,
@@ -105,6 +114,10 @@ public class SubmissionController {
         String email = getCurrentUserEmail();
         User user = getCurrentUserDetails();
         validateAuditTypeForRole(user.getRole(), auditType);
+        if (request.isSharedAdministrativeForm() && "administrative".equals(auditType)) {
+            return ResponseEntity.ok(submissionService.saveSharedAdministrativeContribution(user, request.getContributorPost(),
+                    request.getSections(), request.getValuesData(), request.getTablesData(), request.getAttachments(), true));
+        }
         Submission submitted = submissionService.submitForm(
                 email,
                 auditType,
@@ -132,6 +145,19 @@ public class SubmissionController {
         User user = getCurrentUserDetails();
         if (request.getAuditType() != null && !List.of("vice-chancellor", "iqac").contains(user.getRole().toLowerCase())) {
             validateAuditTypeForRole(user.getRole(), request.getAuditType());
+        }
+        if (request.isSharedAdministrativeForm() && "administrative".equalsIgnoreCase(request.getAuditType())) {
+            Submission updated = submissionService.updateSharedAdministrativeContribution(
+                    id,
+                    user,
+                    request.getAction(),
+                    request.getContributorPost(),
+                    request.getSections(),
+                    request.getValuesData(),
+                    request.getTablesData(),
+                    request.getAttachments()
+            );
+            return ResponseEntity.ok(updated);
         }
         Submission updated = submissionService.updateSubmission(
                 id,
@@ -261,6 +287,10 @@ public class SubmissionController {
         private String tablesData;
         private String attachments;
         private String status;
+        private boolean sharedAdministrativeForm;
+        private String action;
+        private String contributorPost;
+        private List<String> sections;
         private String forwardedAuditorType;
         private String forwardedAuditCategory;
         private List<Long> forwardedToAuditorIds;
@@ -288,9 +318,15 @@ public class SubmissionController {
         private String nextAuditorType;
     }
 
+    public void downloadAttachments(@PathVariable Long id, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        downloadAttachments(id, false, response);
+    }
+
     @GetMapping("/{id}/attachments/download")
     @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")
-    public void downloadAttachments(@PathVariable Long id, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+    public void downloadAttachments(@PathVariable Long id,
+                                    @RequestParam(required = false, defaultValue = "false") boolean includeAllContributors,
+                                    jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
         User user = getCurrentUserDetails();
         Submission submission = submissionService.getSubmissionById(id)
                 .orElseThrow(() -> new com.director_appraisal.director_appraisal.exception.NotFoundException("Submission not found"));
@@ -325,6 +361,10 @@ public class SubmissionController {
             }
             if (submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getTablesData()), attachments);
+            }
+            if (includeAllContributors && "administrative".equalsIgnoreCase(submission.getAuditType())
+                    && submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
+                collectAttachments(mapper.readTree(submission.getValuesData()), attachments);
             }
         } catch (Exception e) {
             // Ignore parse errors, just use what we can parse
@@ -472,7 +512,15 @@ public class SubmissionController {
                 || normalized.contains("scholarshipdetails")
                 || normalized.contains("scholarshipstudents")
                 || normalized.contains("scholarshipstudentdetails")) {
-            return "admin-part-a";
+            return "registrar-part-a";
+        }
+        if (normalized.contains("statutory") || normalized.contains("infrastructure")
+                || normalized.contains("library") || normalized.contains("eresource")
+                || normalized.contains("researchresource") || normalized.contains("auditrecords")) {
+            return "registrar-part-c";
+        }
+        if (normalized.contains("faculty") || normalized.contains("staff")) {
+            return "hr-part-b";
         }
         if (normalized.contains("hackathon")
                 || normalized.contains("ideation")
@@ -482,7 +530,12 @@ public class SubmissionController {
                 || normalized.contains("community")
                 || normalized.contains("adminstudentawards")
                 || normalized.contains("awardsprizesrecognitions")) {
-            return "admin-part-d";
+            return "dean-student-welfare-part-d";
+        }
+        if (normalized.contains("parte") || normalized.contains("parteschools")
+                || normalized.contains("placement") || normalized.contains("trainingactivities")
+                || normalized.contains("industrycollaboration")) {
+            return "dean-placement-part-e";
         }
         return currentSection;
     }
@@ -617,10 +670,16 @@ public class SubmissionController {
             }
             return "Other-Attachments/";
         } else {
-            if (sec.contains("admin-part-a")) {
-                return "Part-A/";
-            } else if (sec.contains("admin-part-d")) {
-                return "Part-D/";
+            if (sec.contains("registrar-part-a")) {
+                return "Registrar/Part-A/";
+            } else if (sec.contains("registrar-part-c")) {
+                return "Registrar/Part-C/";
+            } else if (sec.contains("hr-part-b")) {
+                return "HR/Part-B/";
+            } else if (sec.contains("dean-student-welfare-part-d")) {
+                return "Dean-Student-Welfare/Part-D/";
+            } else if (sec.contains("dean-placement-part-e")) {
+                return "Dean-Placement/Part-E/";
             }
             if (sec.contains("section-a") || sec.contains("sectiona") || sec.contains("part-a") || sec.contains("parta")) {
                 return "Section-A/";
