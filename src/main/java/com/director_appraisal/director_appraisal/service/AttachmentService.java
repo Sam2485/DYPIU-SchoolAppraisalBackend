@@ -26,6 +26,8 @@ import java.util.UUID;
 @Service
 public class AttachmentService {
 
+    public static final long MAX_PDF_SIZE_BYTES = 10L * 1024L * 1024L;
+
     private final String bucketName;
     private final String localUploadPath;
     private Storage storage;
@@ -97,7 +99,7 @@ public class AttachmentService {
         }
 
         // Validate size
-        if (file.getSize() > 10 * 1024 * 1024) {
+        if (file.getSize() > MAX_PDF_SIZE_BYTES) {
             throw new IllegalArgumentException("File size exceeds maximum limit of 10MB.");
         }
 

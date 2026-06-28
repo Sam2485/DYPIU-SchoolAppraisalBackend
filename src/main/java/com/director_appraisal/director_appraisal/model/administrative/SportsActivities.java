@@ -36,4 +36,7 @@ public class SportsActivities {
     @Column(name = "participants_count", columnDefinition = "TEXT")
     private String numberOfBeneficiariesParticipants;
 
+    @Column(columnDefinition = "TEXT")
+    private String attachment;
+
 }

@@ -55,6 +55,9 @@ class SubmissionServiceTest {
     @Mock
     private UserAdministrativePostRepository userAdministrativePostRepository;
 
+    @Mock
+    private AttachmentService attachmentService;
+
     @InjectMocks
     private SubmissionService submissionService;
 
@@ -364,5 +367,130 @@ class SubmissionServiceTest {
                 null,
                 null
         ));
+    }
+
+    @Test
+    void administrativePartAAndPartDAttachmentsArePreservedInTablesData() {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("registrar@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User owner = User.builder()
+                .email("registrar@dypiu.ac.in")
+                .role("administrative")
+                .build();
+        String tablesData = "{\"scholarshipSummary\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"summary.pdf\",\"url\":\"/uploads/users/abc/attachments/summary.pdf\"}]}]," +
+                "\"scholarshipStudents\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"student.pdf\",\"url\":\"/uploads/users/abc/attachments/student.pdf\"}]}]," +
+                "\"hackathons\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"hackathon.pdf\",\"url\":\"/uploads/users/abc/attachments/hackathon.pdf\"}]}]," +
+                "\"culturalActivities\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"cultural.pdf\",\"url\":\"/uploads/users/abc/attachments/cultural.pdf\"}]}]," +
+                "\"sportsActivities\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"sports.pdf\",\"url\":\"/uploads/users/abc/attachments/sports.pdf\"}]}]," +
+                "\"communityActivities\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"community.pdf\",\"url\":\"/uploads/users/abc/attachments/community.pdf\"}]}]," +
+                "\"adminStudentAwards\":[{\"srNo\":\"1\",\"Attachment\":[{\"fileName\":\"award.pdf\",\"url\":\"/uploads/users/abc/attachments/award.pdf\"},{\"fileName\":\"award-extra.pdf\",\"url\":\"/uploads/users/abc/attachments/award-extra.pdf\"}]}]}";
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission updated = submissionService.updateSubmission(
+                123L,
+                owner,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                tablesData,
+                null
+        );
+
+        assertTrue(updated.getTablesData().contains("summary.pdf"));
+        assertTrue(updated.getTablesData().contains("student.pdf"));
+        assertTrue(updated.getTablesData().contains("hackathon.pdf"));
+        assertTrue(updated.getTablesData().contains("cultural.pdf"));
+        assertTrue(updated.getTablesData().contains("sports.pdf"));
+        assertTrue(updated.getTablesData().contains("community.pdf"));
+        assertTrue(updated.getTablesData().contains("award-extra.pdf"));
+    }
+
+    @Test
+    void deletingTableAttachmentDeletesOnlyUnreferencedFile() throws Exception {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("registrar@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{}")
+                .tablesData("{\"scholarshipSummary\":[{\"Attachment\":[{\"fileName\":\"old.pdf\",\"url\":\"/uploads/users/abc/attachments/old.pdf\"}," +
+                        "{\"fileName\":\"kept.pdf\",\"url\":\"/uploads/users/abc/attachments/kept.pdf\"}]}]}")
+                .attachments("[]")
+                .build();
+        User owner = User.builder()
+                .email("registrar@dypiu.ac.in")
+                .role("administrative")
+                .build();
+        String newTablesData = "{\"scholarshipSummary\":[{\"Attachment\":[{\"fileName\":\"kept.pdf\",\"url\":\"/uploads/users/abc/attachments/kept.pdf\"}]}]}";
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission updated = submissionService.updateSubmission(
+                123L,
+                owner,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                newTablesData,
+                "[]"
+        );
+
+        verify(attachmentService).deleteFile("/uploads/users/abc/attachments/old.pdf");
+        verify(attachmentService, never()).deleteFile("/uploads/users/abc/attachments/kept.pdf");
+        assertFalse(updated.getTablesData().contains("old.pdf"));
+        assertTrue(updated.getTablesData().contains("kept.pdf"));
+    }
+
+    @Test
+    void administrativeTableAttachmentRejectsInvalidPdfMetadata() {
+        Submission submission = Submission.builder()
+                .id(123L)
+                .email("registrar@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User owner = User.builder()
+                .email("registrar@dypiu.ac.in")
+                .role("administrative")
+                .build();
+        String invalidTablesData = "{\"scholarshipSummary\":[{\"Attachment\":[{\"fileName\":\"bad.docx\",\"url\":\"/uploads/users/abc/attachments/bad.docx\"}]}]}";
+
+        when(submissionRepository.findById(123L)).thenReturn(Optional.of(submission));
+
+        assertThrows(IllegalArgumentException.class, () -> submissionService.updateSubmission(
+                123L,
+                owner,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                invalidTablesData,
+                null
+        ));
+        verify(submissionRepository, never()).save(any(Submission.class));
     }
 }

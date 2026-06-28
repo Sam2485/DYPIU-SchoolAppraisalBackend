@@ -42,4 +42,7 @@ public class ScholarshipSummary {
     @Column(name = "awarding_org", columnDefinition = "TEXT")
     private String awardingOrganization;
 
+    @Column(columnDefinition = "TEXT")
+    private String attachment;
+
 }

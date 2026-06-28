@@ -39,4 +39,7 @@ public class ScholarshipStudents {
     @Column(columnDefinition = "TEXT")
     private String awardingAgency;
 
+    @Column(columnDefinition = "TEXT")
+    private String attachment;
+
 }

@@ -311,7 +311,7 @@ public class SubmissionController {
             }
         }
 
-        // submission.attachments is primary; tablesData is only a fallback to avoid duplicate ZIP entries.
+        // submission.attachments remains primary, but table/value payloads may contain section-specific attachments.
         List<ExtractedAttachment> attachments = new java.util.ArrayList<>();
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         
@@ -319,7 +319,7 @@ public class SubmissionController {
             if (submission.getAttachments() != null && !submission.getAttachments().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getAttachments()), attachments);
             }
-            if (attachments.isEmpty() && submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
+            if (submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getTablesData()), attachments);
             }
         } catch (Exception e) {
@@ -391,14 +391,20 @@ public class SubmissionController {
     }
 
     private void collectAttachments(com.fasterxml.jackson.databind.JsonNode node, List<ExtractedAttachment> list) {
+        collectAttachments(node, list, null);
+    }
+
+    private void collectAttachments(com.fasterxml.jackson.databind.JsonNode node, List<ExtractedAttachment> list, String sectionContext) {
         if (node == null) return;
         if (node.isObject()) {
+            String currentSection = sectionContext;
             if (node.has("url") && node.get("url").isTextual()) {
                 String url = node.get("url").asText();
                 if (url.startsWith("/uploads/") || url.contains(".storage.googleapis.com") || url.contains("storage.googleapis.com")) {
                     ExtractedAttachment att = new ExtractedAttachment();
                     att.url = url;
                     att.objectKey = extractObjectKey(url);
+                    att.sectionId = currentSection;
                     
                     if (node.has("fileName") && node.get("fileName").isTextual()) {
                         att.fileName = node.get("fileName").asText();
@@ -444,51 +450,79 @@ public class SubmissionController {
                     list.add(att);
                 }
             }
-            node.fields().forEachRemaining(entry -> collectAttachments(entry.getValue(), list));
+            node.fields().forEachRemaining(entry ->
+                    collectAttachments(entry.getValue(), list, resolveAttachmentSectionContext(entry.getKey(), currentSection)));
         } else if (node.isArray()) {
             for (com.fasterxml.jackson.databind.JsonNode item : node) {
-                collectAttachments(item, list);
+                collectAttachments(item, list, sectionContext);
             }
         }
+    }
+
+    private String resolveAttachmentSectionContext(String key, String currentSection) {
+        if (key == null || key.isBlank()) {
+            return currentSection;
+        }
+        String normalized = key.toLowerCase().replaceAll("[^a-z0-9]", "");
+        if (normalized.contains("scholarshipsummary")
+                || normalized.contains("scholarshipdetails")
+                || normalized.contains("scholarshipstudents")
+                || normalized.contains("scholarshipstudentdetails")) {
+            return "admin-part-a";
+        }
+        if (normalized.contains("hackathon")
+                || normalized.contains("ideation")
+                || normalized.contains("cultural")
+                || normalized.contains("sportsactivities")
+                || normalized.contains("sportsclubs")
+                || normalized.contains("community")
+                || normalized.contains("adminstudentawards")
+                || normalized.contains("awardsprizesrecognitions")) {
+            return "admin-part-d";
+        }
+        return currentSection;
     }
 
     private List<ExtractedAttachment> deduplicateAttachments(List<ExtractedAttachment> attachments) {
-        java.util.Map<String, ExtractedAttachment> byKey = new java.util.LinkedHashMap<>();
+        java.util.Set<String> seenKeys = new java.util.HashSet<>();
+        List<ExtractedAttachment> deduped = new java.util.ArrayList<>();
         List<ExtractedAttachment> noKey = new java.util.ArrayList<>();
         for (ExtractedAttachment attachment : attachments) {
-            String key = attachmentIdentityKey(attachment);
-            if (key == null) {
+            List<String> keys = attachmentIdentityKeys(attachment);
+            if (keys.isEmpty()) {
                 noKey.add(attachment);
                 continue;
             }
-            if (byKey.containsKey(key)) {
-                System.err.println("Skipping duplicate attachment in ZIP: " + key);
+            String matchedKey = keys.stream().filter(seenKeys::contains).findFirst().orElse(null);
+            if (matchedKey != null) {
+                System.err.println("Skipping duplicate attachment in ZIP: " + matchedKey);
                 continue;
             }
-            byKey.put(key, attachment);
+            seenKeys.addAll(keys);
+            deduped.add(attachment);
         }
-        List<ExtractedAttachment> result = new java.util.ArrayList<>(byKey.values());
-        result.addAll(noKey);
-        return result;
+        deduped.addAll(noKey);
+        return deduped;
     }
 
-    private String attachmentIdentityKey(ExtractedAttachment attachment) {
+    private List<String> attachmentIdentityKeys(ExtractedAttachment attachment) {
+        List<String> keys = new java.util.ArrayList<>();
         if (notBlank(attachment.id)) {
-            return "id:" + attachment.id.trim();
+            keys.add("id:" + attachment.id.trim());
         }
         if (notBlank(attachment.objectKey)) {
-            return "key:" + normalizeAttachmentUrl(attachment.objectKey);
+            keys.add("key:" + normalizeAttachmentUrl(attachment.objectKey));
         }
         if (notBlank(attachment.url)) {
-            return "url:" + normalizeAttachmentUrl(attachment.url);
+            keys.add("url:" + normalizeAttachmentUrl(attachment.url));
         }
         if (notBlank(attachment.checksum)) {
-            return "checksum:" + attachment.checksum.trim().toLowerCase();
+            keys.add("checksum:" + attachment.checksum.trim().toLowerCase());
         }
         if (notBlank(attachment.fileName) && notBlank(attachment.size)) {
-            return "name-size:" + attachment.fileName.trim().toLowerCase() + ":" + attachment.size.trim();
+            keys.add("name-size:" + attachment.fileName.trim().toLowerCase() + ":" + attachment.size.trim());
         }
-        return null;
+        return keys;
     }
 
     private String extractObjectKey(String url) {
@@ -579,6 +613,11 @@ public class SubmissionController {
             }
             return "Other-Attachments/";
         } else {
+            if (sec.contains("admin-part-a")) {
+                return "Part-A/";
+            } else if (sec.contains("admin-part-d")) {
+                return "Part-D/";
+            }
             if (sec.contains("section-a") || sec.contains("sectiona") || sec.contains("part-a") || sec.contains("parta")) {
                 return "Section-A/";
             } else if (sec.contains("section-b") || sec.contains("sectionb") || sec.contains("part-b") || sec.contains("partb")) {

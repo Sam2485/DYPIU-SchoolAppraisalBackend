@@ -39,4 +39,7 @@ public class AdminStudentAwards {
     @Column(name = "student_name", columnDefinition = "TEXT")
     private String nameOfTheStudent;
 
+    @Column(columnDefinition = "TEXT")
+    private String attachment;
+
 }

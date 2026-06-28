@@ -393,6 +393,49 @@ public class SubmissionIntegrationTest {
     }
 
     @Test
+    void testAdministrativePartAAndPartDAttachmentsAreDiscoveredAndDeduplicatedInZip() throws Exception {
+        authenticateAs(iqacUser);
+
+        Submission sub = Submission.builder()
+                .email("registrar@dypiu.ac.in")
+                .auditType("administrative")
+                .administrativePost("registrar")
+                .status("APPROVED")
+                .reportCategory("INTERNAL")
+                .attachments("[]")
+                .tablesData("{\"scholarshipSummary\":[{\"Attachment\":[{\"fileName\":\"summary.pdf\",\"url\":\"/uploads/summary.pdf\"}]}]," +
+                        "\"scholarshipStudents\":[{\"Attachment\":[{\"fileName\":\"student.pdf\",\"url\":\"/uploads/student.pdf\"}]}]," +
+                        "\"hackathons\":[{\"Attachment\":[{\"fileName\":\"hackathon.pdf\",\"url\":\"/uploads/hackathon.pdf\"},{\"fileName\":\"shared.pdf\",\"url\":\"/uploads/shared-admin.pdf\"}]}]," +
+                        "\"culturalActivities\":[{\"Attachment\":[{\"fileName\":\"cultural.pdf\",\"url\":\"/uploads/cultural.pdf\"}]}]," +
+                        "\"sportsActivities\":[{\"Attachment\":[{\"fileName\":\"sports.pdf\",\"url\":\"/uploads/sports.pdf\"}]}]," +
+                        "\"communityActivities\":[{\"Attachment\":[{\"fileName\":\"community.pdf\",\"url\":\"/uploads/community.pdf\"}]}]," +
+                        "\"adminStudentAwards\":[{\"Attachment\":[{\"fileName\":\"award.pdf\",\"url\":\"/uploads/award.pdf\"},{\"fileName\":\"shared.pdf\",\"url\":\"/uploads/shared-admin.pdf\"}]}]}")
+                .build();
+        sub = submissionRepository.save(sub);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        submissionController.downloadAttachments(sub.getId(), response);
+
+        List<String> entryNames = new java.util.ArrayList<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(response.getContentAsByteArray()))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                entryNames.add(entry.getName());
+            }
+        }
+
+        assertTrue(entryNames.contains("Part-A/summary.pdf"));
+        assertTrue(entryNames.contains("Part-A/student.pdf"));
+        assertTrue(entryNames.contains("Part-D/hackathon.pdf"));
+        assertTrue(entryNames.contains("Part-D/cultural.pdf"));
+        assertTrue(entryNames.contains("Part-D/sports.pdf"));
+        assertTrue(entryNames.contains("Part-D/community.pdf"));
+        assertTrue(entryNames.contains("Part-D/award.pdf"));
+        assertTrue(entryNames.contains("Part-D/shared.pdf"));
+        assertEquals(8, entryNames.size());
+    }
+
+    @Test
     void testRejectingNextCycleFromExternalReports() {
         authenticateAs(iqacUser);
 

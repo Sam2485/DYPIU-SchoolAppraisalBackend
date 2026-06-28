@@ -42,6 +42,7 @@ public class SubmissionService {
     private final SubmissionAuditorAssignmentRepository auditorAssignmentRepository;
     private final AcademicYearService academicYearService;
     private final UserAdministrativePostRepository userAdministrativePostRepository;
+    private final AttachmentService attachmentService;
 
     @Transactional
     public Submission getOrCreateDraft(String email, String auditType) {
@@ -96,9 +97,10 @@ public class SubmissionService {
 
         submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
+        String preparedAttachments = deduplicateAttachmentMetadataJson(attachments);
         submission.setValuesData(valuesData);
-        submission.setTablesData(tablesData);
-        submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        submission.setAttachments(preparedAttachments);
         applySubmissionDefaults(submission);
         ensureVersion(submission);
 
@@ -122,9 +124,10 @@ public class SubmissionService {
 
         submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
+        String preparedAttachments = deduplicateAttachmentMetadataJson(attachments);
         submission.setValuesData(valuesData);
-        submission.setTablesData(tablesData);
-        submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        submission.setAttachments(preparedAttachments);
         submission.setStatus("SUBMITTED");
         submission.setSubmittedAt(LocalDateTime.now());
         applySubmissionDefaults(submission);
@@ -156,9 +159,10 @@ public class SubmissionService {
 
         submission.setSchool(SchoolUtils.canonicalizeSchool(school));
         submission.setSubmittedBy(submittedBy);
+        String preparedAttachments = deduplicateAttachmentMetadataJson(attachments);
         submission.setValuesData(valuesData);
-        submission.setTablesData(tablesData);
-        submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        submission.setAttachments(preparedAttachments);
         applySubmissionDefaults(submission);
         ensureVersion(submission);
 
@@ -234,9 +238,10 @@ public class SubmissionService {
         submission.setRemarks(remarks);
         submission.setReviewedBy(reviewer.getName());
         submission.setReviewedAt(LocalDateTime.now());
+        String preparedAttachments = attachments != null ? deduplicateAttachmentMetadataJson(attachments) : submission.getAttachments();
         if (valuesData != null) submission.setValuesData(valuesData);
-        if (tablesData != null) submission.setTablesData(tablesData);
-        if (attachments != null) submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        if (tablesData != null) submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        if (attachments != null) submission.setAttachments(preparedAttachments);
         applySubmissionDefaults(submission);
 
         Submission saved = submissionRepository.save(submission);
@@ -626,9 +631,10 @@ public class SubmissionService {
             }
         }
 
+        String preparedAttachments = attachments != null ? deduplicateAttachmentMetadataJson(attachments) : submission.getAttachments();
         if (valuesData != null) submission.setValuesData(valuesData);
-        if (tablesData != null) submission.setTablesData(tablesData);
-        if (attachments != null) submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        if (tablesData != null) submission.setTablesData(prepareTablesDataUpdate(submission, tablesData, preparedAttachments));
+        if (attachments != null) submission.setAttachments(preparedAttachments);
 
         applySubmissionDefaults(submission);
         ensureVersion(submission);
@@ -975,6 +981,170 @@ public class SubmissionService {
             return mapper.writeValueAsString(deduped);
         } catch (Exception e) {
             return json;
+        }
+    }
+
+    private String prepareTablesDataUpdate(Submission submission, String tablesData, String effectiveAttachments) {
+        validateTableAttachmentMetadata(tablesData);
+        cleanupRemovedTableAttachments(submission, tablesData, effectiveAttachments);
+        return tablesData;
+    }
+
+    private void validateTableAttachmentMetadata(String tablesData) {
+        if (tablesData == null || tablesData.isBlank()) {
+            return;
+        }
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            validateTableAttachmentMetadata(mapper.readTree(tablesData), null);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("tablesData must be valid JSON");
+        }
+    }
+
+    private void validateTableAttachmentMetadata(com.fasterxml.jackson.databind.JsonNode node, String fieldName) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+        boolean attachmentContext = normalizeJsonKey(fieldName).contains("attachment");
+        if (node.isObject()) {
+            if (attachmentContext || hasAttachmentUrlField(node)) {
+                validateAttachmentObject(node);
+            }
+            node.fields().forEachRemaining(entry -> validateTableAttachmentMetadata(entry.getValue(), entry.getKey()));
+        } else if (node.isArray()) {
+            node.forEach(item -> validateTableAttachmentMetadata(item, fieldName));
+        }
+    }
+
+    private void validateAttachmentObject(com.fasterxml.jackson.databind.JsonNode node) {
+        String url = textField(node, "url", "fileUrl", "downloadUrl");
+        if (url == null) {
+            throw new IllegalArgumentException("Attachment URL is required");
+        }
+        if (!isAllowedAttachmentUrl(url)) {
+            throw new IllegalArgumentException("Invalid attachment storage URL");
+        }
+
+        String fileName = textField(node, "fileName", "name");
+        if (fileName == null) {
+            fileName = fileNameFromUrl(url);
+        }
+        String sanitized = sanitizeAttachmentFilename(fileName);
+        if (!sanitized.toLowerCase().endsWith(".pdf")) {
+            throw new IllegalArgumentException("Only PDF attachments are allowed");
+        }
+
+        String size = textField(node, "size", "fileSize");
+        if (size != null) {
+            try {
+                long parsedSize = Long.parseLong(size);
+                if (parsedSize > AttachmentService.MAX_PDF_SIZE_BYTES) {
+                    throw new IllegalArgumentException("Attachment file size exceeds maximum limit of 10MB");
+                }
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Attachment file size must be numeric");
+            }
+        }
+    }
+
+    private void cleanupRemovedTableAttachments(Submission submission, String newTablesData, String effectiveAttachments) {
+        java.util.Set<String> oldUrls = new java.util.HashSet<>();
+        collectAttachmentUrls(submission.getTablesData(), oldUrls);
+        if (oldUrls.isEmpty()) {
+            return;
+        }
+
+        java.util.Set<String> stillReferenced = new java.util.HashSet<>();
+        collectAttachmentUrls(newTablesData, stillReferenced);
+        collectAttachmentUrls(submission.getValuesData(), stillReferenced);
+        collectAttachmentUrls(effectiveAttachments, stillReferenced);
+
+        oldUrls.forEach(url -> {
+            if (stillReferenced.contains(url)) {
+                return;
+            }
+            try {
+                attachmentService.deleteFile(url);
+            } catch (Exception e) {
+                System.err.println("Unable to delete removed table attachment " + url + ": " + e.getMessage());
+            }
+        });
+    }
+
+    private boolean hasAttachmentUrlField(com.fasterxml.jackson.databind.JsonNode node) {
+        return textField(node, "url", "fileUrl", "downloadUrl") != null;
+    }
+
+    private boolean isAllowedAttachmentUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        if (url.startsWith("/uploads/")) {
+            return true;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String host = uri.getHost();
+            return host != null && host.toLowerCase().contains("storage.googleapis.com")
+                    && uri.getPath() != null && !uri.getPath().isBlank();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String fileNameFromUrl(String url) {
+        String normalized = url == null ? "" : url.replace("\\", "/");
+        try {
+            java.net.URI uri = java.net.URI.create(normalized);
+            if (uri.getPath() != null && !uri.getPath().isBlank()) {
+                normalized = uri.getPath();
+            }
+        } catch (Exception ignored) {
+            // Fall back to the raw URL text.
+        }
+        int lastSlash = normalized.lastIndexOf('/');
+        return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+    }
+
+    private String sanitizeAttachmentFilename(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "attachment.pdf";
+        }
+        filename = filename.replace("\\", "/");
+        int lastSlash = filename.lastIndexOf('/');
+        String base = lastSlash >= 0 ? filename.substring(lastSlash + 1) : filename;
+        base = base.replace("..", "_");
+        String clean = base.replaceAll("[^A-Za-z0-9._-]", "_");
+        return clean.isBlank() ? "attachment.pdf" : clean;
+    }
+
+    private void collectAttachmentUrls(String json, java.util.Set<String> urls) {
+        if (json == null || json.isBlank()) {
+            return;
+        }
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            collectAttachmentUrls(mapper.readTree(json), urls);
+        } catch (Exception ignored) {
+            // Ignore invalid JSON for cleanup.
+        }
+    }
+
+    private void collectAttachmentUrls(com.fasterxml.jackson.databind.JsonNode node, java.util.Set<String> urls) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject()) {
+            String url = textField(node, "url", "fileUrl", "downloadUrl");
+            if (url != null) {
+                urls.add(normalizeUrl(url));
+            }
+            node.fields().forEachRemaining(entry -> collectAttachmentUrls(entry.getValue(), urls));
+        } else if (node.isArray()) {
+            node.forEach(item -> collectAttachmentUrls(item, urls));
         }
     }
 
