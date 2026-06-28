@@ -69,6 +69,7 @@ public class Submission {
     private String academicYear;
     private String auditCycle;
     private String reportCategory;
+    private String schoolGroup;
     private String administrativePost;
     private LocalDateTime approvedAt;
     private Long approvedByUserId;
@@ -107,6 +108,11 @@ public class Submission {
     @com.fasterxml.jackson.annotation.JsonGetter("academicYear")
     public String getAcademicYearForJson() {
         return academicYear != null ? academicYear : auditCycle;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("schoolGroup")
+    public String getSchoolGroupForJson() {
+        return schoolGroup;
     }
 
     @com.fasterxml.jackson.annotation.JsonGetter("hasNextCycle")

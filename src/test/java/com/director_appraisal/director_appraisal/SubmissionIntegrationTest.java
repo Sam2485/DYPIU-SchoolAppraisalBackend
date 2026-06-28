@@ -340,6 +340,59 @@ public class SubmissionIntegrationTest {
     }
 
     @Test
+    void testAttachmentInMetadataAndTablesDataIsDownloadedOnce() throws Exception {
+        authenticateAs(iqacUser);
+
+        Submission sub = Submission.builder()
+                .email(directorUser.getEmail())
+                .auditType("academic")
+                .school("SOCSEA")
+                .status("APPROVED")
+                .reportCategory("INTERNAL")
+                .attachments("[{\"fileName\":\"proof.pdf\",\"url\":\"/uploads/shared.pdf\"}]")
+                .tablesData("{\"studentStrength\":[{\"proof\":{\"fileName\":\"proof.pdf\",\"url\":\"/uploads/shared.pdf\"}}]}")
+                .build();
+        sub = submissionRepository.save(sub);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        submissionController.downloadAttachments(sub.getId(), response);
+
+        int count = 0;
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(response.getContentAsByteArray()))) {
+            while (zis.getNextEntry() != null) {
+                count++;
+            }
+        }
+        assertEquals(1, count);
+    }
+
+    @Test
+    void testZipFallsBackToTablesDataWhenSubmissionAttachmentsAreEmpty() throws Exception {
+        authenticateAs(iqacUser);
+
+        Submission sub = Submission.builder()
+                .email(directorUser.getEmail())
+                .auditType("academic")
+                .school("SOCSEA")
+                .status("APPROVED")
+                .reportCategory("INTERNAL")
+                .attachments("[]")
+                .tablesData("{\"studentStrength\":[{\"proof\":{\"fileName\":\"table-proof.pdf\",\"url\":\"/uploads/table-proof.pdf\"}}]}")
+                .build();
+        sub = submissionRepository.save(sub);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        submissionController.downloadAttachments(sub.getId(), response);
+
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(response.getContentAsByteArray()))) {
+            ZipEntry entry = zis.getNextEntry();
+            assertNotNull(entry);
+            assertEquals("Other-Attachments/table-proof.pdf", entry.getName());
+            assertNull(zis.getNextEntry());
+        }
+    }
+
+    @Test
     void testRejectingNextCycleFromExternalReports() {
         authenticateAs(iqacUser);
 

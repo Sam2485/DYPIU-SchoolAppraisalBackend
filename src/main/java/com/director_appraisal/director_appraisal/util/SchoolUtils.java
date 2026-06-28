@@ -74,4 +74,16 @@ public class SchoolUtils {
         }
         return school.trim().toUpperCase(Locale.ROOT); // fallback
     }
+
+    public static String schoolGroup(String school) {
+        String canonical = canonicalizeSchool(school);
+        if (canonical == null) {
+            return null;
+        }
+        return switch (canonical.toUpperCase(Locale.ROOT)) {
+            case "SOCSEA", "SOBB", "SOCE", "SOEMR" -> "engineering";
+            case "SOCM", "SOMCS", "SOD", "SOAA" -> "nonEngineering";
+            default -> null;
+        };
+    }
 }

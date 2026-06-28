@@ -39,4 +39,7 @@ public class Snapshot {
     private String attachments;
 
     private Integer version;
+    private String academicYear;
+    private String auditCycle;
+    private String schoolGroup;
 }

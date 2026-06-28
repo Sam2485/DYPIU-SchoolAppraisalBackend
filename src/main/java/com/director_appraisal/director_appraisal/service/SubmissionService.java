@@ -8,6 +8,7 @@ import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionAuditorAssignmentRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
+import com.director_appraisal.director_appraisal.repository.UserAdministrativePostRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
 import com.director_appraisal.director_appraisal.util.SchoolUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +41,7 @@ public class SubmissionService {
     private final TableDataPromotionService tableDataPromotionService;
     private final SubmissionAuditorAssignmentRepository auditorAssignmentRepository;
     private final AcademicYearService academicYearService;
+    private final UserAdministrativePostRepository userAdministrativePostRepository;
 
     @Transactional
     public Submission getOrCreateDraft(String email, String auditType) {
@@ -69,7 +71,7 @@ public class SubmissionService {
                 .tablesData("{}")
                 .attachments("[]")
                 .academicYear(academicYear)
-                .auditCycle(academicYear)
+                .auditCycle(toAuditCycle(academicYear))
                 .reportCategory("INTERNAL")
                 .version(1)
                 .build();
@@ -96,8 +98,8 @@ public class SubmissionService {
         submission.setSubmittedBy(submittedBy);
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
-        submission.setAttachments(attachments);
-        ensureAcademicYear(submission);
+        submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        applySubmissionDefaults(submission);
         ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
@@ -122,10 +124,10 @@ public class SubmissionService {
         submission.setSubmittedBy(submittedBy);
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
-        submission.setAttachments(attachments);
+        submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
         submission.setStatus("SUBMITTED");
         submission.setSubmittedAt(LocalDateTime.now());
-        ensureAcademicYear(submission);
+        applySubmissionDefaults(submission);
         ensureRootSubmissionId(submission);
         ensureVersion(submission);
 
@@ -156,8 +158,8 @@ public class SubmissionService {
         submission.setSubmittedBy(submittedBy);
         submission.setValuesData(valuesData);
         submission.setTablesData(tablesData);
-        submission.setAttachments(attachments);
-        ensureAcademicYear(submission);
+        submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        applySubmissionDefaults(submission);
         ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
@@ -207,7 +209,6 @@ public class SubmissionService {
             submission.setReportCategory(expectedReportCategory);
             if (clean(auditCycle) != null) {
                 submission.setAuditCycle(clean(auditCycle));
-                submission.setAcademicYear(clean(auditCycle));
             }
             ensureAcademicYear(submission);
             if (version != null) {
@@ -235,7 +236,8 @@ public class SubmissionService {
         submission.setReviewedAt(LocalDateTime.now());
         if (valuesData != null) submission.setValuesData(valuesData);
         if (tablesData != null) submission.setTablesData(tablesData);
-        if (attachments != null) submission.setAttachments(attachments);
+        if (attachments != null) submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
+        applySubmissionDefaults(submission);
 
         Submission saved = submissionRepository.save(submission);
         persistDataForStatus(saved);
@@ -265,6 +267,9 @@ public class SubmissionService {
                 .tablesData(submission.getTablesData())
                 .attachments(submission.getAttachments())
                 .version(submission.getVersion())
+                .academicYear(submission.getAcademicYear())
+                .auditCycle(submission.getAuditCycle())
+                .schoolGroup(submission.getSchoolGroup())
                 .build();
         snapshotRepository.save(snapshot);
     }
@@ -351,7 +356,7 @@ public class SubmissionService {
             Optional<User> submitterOpt = userRepository.findByEmail(submission.getEmail());
             if (submitterOpt.isPresent()) {
                 User submitter = submitterOpt.get();
-                return submitter.getPost() != null && submitter.getPost().equalsIgnoreCase(auditor.getPost());
+                return auditorHasAdministrativePost(auditor, submitter.getPost());
             }
         }
         
@@ -388,7 +393,7 @@ public class SubmissionService {
                         Optional<User> submitterOpt = userRepository.findByEmail(submission.getEmail());
                         if (submitterOpt.isPresent()) {
                             User submitter = submitterOpt.get();
-                            return auditor.getPost() != null && auditor.getPost().equalsIgnoreCase(submitter.getPost());
+                            return auditorHasAdministrativePost(auditor, submitter.getPost());
                         }
                     }
                     return false;
@@ -509,6 +514,15 @@ public class SubmissionService {
         }
     }
 
+    public List<Submission> getPreviousReports(User user, String academicYear) {
+        validateReviewer(user);
+        return submissionRepository.findByStatusIn(List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL)).stream()
+                .filter(submission -> academicYear == null || academicYear.isBlank()
+                        || academicYear.equals(submission.getAcademicYear())
+                        || academicYear.equals(submission.getAuditCycle()))
+                .toList();
+    }
+
     @Transactional
     public Submission updateSubmission(Long id, User caller, String status, String forwardedAuditorType,
                                        String forwardedAuditCategory,
@@ -614,8 +628,9 @@ public class SubmissionService {
 
         if (valuesData != null) submission.setValuesData(valuesData);
         if (tablesData != null) submission.setTablesData(tablesData);
-        if (attachments != null) submission.setAttachments(attachments);
+        if (attachments != null) submission.setAttachments(deduplicateAttachmentMetadataJson(attachments));
 
+        applySubmissionDefaults(submission);
         ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
@@ -686,6 +701,7 @@ public class SubmissionService {
                 .academicYear(approved.getAcademicYear() != null ? approved.getAcademicYear() : approved.getAuditCycle())
                 .auditCycle(approved.getAuditCycle())
                 .reportCategory("EXTERNAL")
+                .schoolGroup(approved.getSchoolGroup())
                 .administrativePost(approved.getAdministrativePost())
                 .rootSubmissionId(rootSubmissionId)
                 .parentSubmissionId(approved.getId())
@@ -800,10 +816,21 @@ public class SubmissionService {
                 throw new IllegalArgumentException("Academic auditor must match the submission school: " + auditor.getEmail());
             }
         } else if ("administrative".equalsIgnoreCase(auditType)) {
-            if (submitterPost == null || auditor.getPost() == null || !submitterPost.equalsIgnoreCase(auditor.getPost())) {
+            if (submitterPost == null || !auditorHasAdministrativePost(auditor, submitterPost)) {
                 throw new IllegalArgumentException("Administrative auditor must match the administrative post: " + auditor.getEmail());
             }
         }
+    }
+
+    private boolean auditorHasAdministrativePost(User auditor, String post) {
+        if (post == null || post.isBlank()) {
+            return false;
+        }
+        String normalizedPost = post.trim().toLowerCase();
+        if (auditor.getId() != null && userAdministrativePostRepository.existsByUserIdAndPost(auditor.getId(), normalizedPost)) {
+            return true;
+        }
+        return auditor.getPost() != null && auditor.getPost().equalsIgnoreCase(normalizedPost);
     }
 
     private String resolveAdministrativePost(Submission submission) {
@@ -900,14 +927,121 @@ public class SubmissionService {
             if (year == null || year.isBlank()) {
                 year = academicYearService.getCurrentAcademicYearLabel();
             }
-            submission.setAcademicYear(year);
+            submission.setAcademicYear(toAcademicYear(year));
         }
         if (submission.getAuditCycle() == null || submission.getAuditCycle().isBlank()) {
-            submission.setAuditCycle(submission.getAcademicYear());
+            submission.setAuditCycle(toAuditCycle(submission.getAcademicYear()));
         }
         if (submission.getReportCategory() == null || submission.getReportCategory().isBlank()) {
             submission.setReportCategory(submission.getVersion() != null && submission.getVersion() == 2 ? "EXTERNAL" : "INTERNAL");
         }
+    }
+
+    private void applySubmissionDefaults(Submission submission) {
+        ensureAcademicYear(submission);
+        if ("academic".equalsIgnoreCase(submission.getAuditType())) {
+            String canonicalSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+            submission.setSchool(canonicalSchool);
+            String group = SchoolUtils.schoolGroup(canonicalSchool);
+            if ("all".equalsIgnoreCase(group)) {
+                group = null;
+            }
+            submission.setSchoolGroup(group);
+        }
+    }
+
+    private String deduplicateAttachmentMetadataJson(String json) {
+        if (json == null || json.isBlank()) {
+            return json;
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+            if (!root.isArray()) {
+                return json;
+            }
+
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            com.fasterxml.jackson.databind.node.ArrayNode deduped = mapper.createArrayNode();
+            for (com.fasterxml.jackson.databind.JsonNode item : root) {
+                String key = attachmentDedupeKey(item);
+                if (key == null || seen.add(key)) {
+                    deduped.add(item);
+                } else {
+                    System.err.println("Skipping duplicate attachment metadata: " + key);
+                }
+            }
+            return mapper.writeValueAsString(deduped);
+        } catch (Exception e) {
+            return json;
+        }
+    }
+
+    private String attachmentDedupeKey(com.fasterxml.jackson.databind.JsonNode item) {
+        if (item == null || !item.isObject()) {
+            return null;
+        }
+        String id = textField(item, "id", "attachmentId", "databaseId");
+        if (id != null) {
+            return "id:" + id;
+        }
+        String objectKey = textField(item, "objectKey", "storageObjectKey", "storageKey", "key");
+        if (objectKey != null) {
+            return "key:" + normalizeUrl(objectKey);
+        }
+        String url = textField(item, "url", "fileUrl", "downloadUrl");
+        if (url != null) {
+            return "url:" + normalizeUrl(url);
+        }
+        String checksum = textField(item, "checksum", "sha256", "md5");
+        if (checksum != null) {
+            return "checksum:" + checksum.toLowerCase();
+        }
+        String fileName = textField(item, "fileName", "name");
+        String size = textField(item, "size", "fileSize");
+        if (fileName != null && size != null) {
+            return "name-size:" + fileName.trim().toLowerCase() + ":" + size.trim();
+        }
+        return null;
+    }
+
+    private String textField(com.fasterxml.jackson.databind.JsonNode node, String... names) {
+        for (String name : names) {
+            com.fasterxml.jackson.databind.JsonNode value = node.get(name);
+            if (value != null && !value.isNull()) {
+                String text = value.asText(null);
+                if (text != null && !text.isBlank()) {
+                    return text.trim();
+                }
+            }
+        }
+        return null;
+    }
+
+    private String normalizeUrl(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().replace("\\", "/");
+        while (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized.toLowerCase();
+    }
+
+    private String toAuditCycle(String academicYear) {
+        if (academicYear == null || !academicYear.matches("\\d{4}-\\d{4}")) {
+            return academicYear;
+        }
+        return academicYear.substring(0, 4) + "-" + academicYear.substring(7);
+    }
+
+    private String toAcademicYear(String value) {
+        if (value != null && value.matches("\\d{4}-\\d{2}")) {
+            return value.substring(0, 5) + value.substring(0, 2) + value.substring(5);
+        }
+        return value;
     }
 
     private Map<String, Object> toVersionHistoryResponse(Submission submission) {
@@ -916,6 +1050,7 @@ public class SubmissionService {
         response.put("version", submission.getVersion());
         response.put("academicYear", submission.getAcademicYear() != null ? submission.getAcademicYear() : submission.getAuditCycle());
         response.put("auditCycle", submission.getAuditCycle());
+        response.put("schoolGroup", submission.getSchoolGroup());
         response.put("reportCategory", submission.getReportCategory());
         response.put("status", submission.getStatus());
         response.put("valuesData", submission.getValuesData());

@@ -1,6 +1,8 @@
 package com.director_appraisal.director_appraisal.controller;
 
 import com.director_appraisal.director_appraisal.model.User;
+import com.director_appraisal.director_appraisal.model.UserAdministrativePost;
+import com.director_appraisal.director_appraisal.repository.UserAdministrativePostRepository;
 import com.director_appraisal.director_appraisal.service.UserService;
 import com.director_appraisal.director_appraisal.util.SchoolUtils;
 import lombok.Data;
@@ -37,6 +39,7 @@ public class UserController {
             "dean-placement", "Dean Placement");
 
     private final UserService userService;
+    private final UserAdministrativePostRepository userAdministrativePostRepository;
 
     @GetMapping
     public ResponseEntity<?> getUsers(Authentication authentication) {
@@ -79,6 +82,7 @@ public class UserController {
                     .auditorRole(validatedUser.auditorRole)
                     .post(validatedUser.post)
                     .build());
+            saveAdministrativePosts(savedUser, validatedUser.administrativePosts);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "User created successfully",
@@ -167,6 +171,7 @@ public class UserController {
             user.setPost(validatedUser.post);
 
             User savedUser = userService.updateUser(user, validatedUser.password);
+            saveAdministrativePosts(savedUser, validatedUser.administrativePosts);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "User updated successfully",
@@ -246,6 +251,7 @@ public class UserController {
         String school = clean(request.getSchool());
         String designation = clean(request.getDesignation());
         String post = normalize(request.getPost());
+        List<String> administrativePosts = normalizeAdministrativePosts(request.getAdministrativePosts());
 
         if (isBlank(name)) {
             throw new IllegalArgumentException("Name is required.");
@@ -292,6 +298,9 @@ public class UserController {
             role = auditorRole;
             
             if ("academic".equals(category)) {
+                if (!administrativePosts.isEmpty()) {
+                    throw new IllegalArgumentException("Academic auditors must not have administrativePosts.");
+                }
                 if (isBlank(school)) {
                     throw new IllegalArgumentException("School is required for academic auditors.");
                 }
@@ -305,21 +314,21 @@ public class UserController {
                 }
             } else if ("administrative".equals(category)) {
                 school = ADMINISTRATIVE_OFFICE;
-                if (isBlank(post)) {
-                    throw new IllegalArgumentException("Post is required for administrative auditors.");
+                if (administrativePosts.isEmpty() && !isBlank(post)) {
+                    administrativePosts = List.of(post);
                 }
-                String mappedDesignation = ADMINISTRATIVE_POSTS.get(post);
-                if (mappedDesignation == null) {
-                    throw new IllegalArgumentException("Invalid administrative post.");
+                if (administrativePosts.isEmpty()) {
+                    throw new IllegalArgumentException("At least one administrative post is required for administrative auditors.");
                 }
                 if (isBlank(designation)) {
-                    designation = (auditorType.substring(0, 1).toUpperCase() + auditorType.substring(1)) + " " + mappedDesignation + " Auditor";
+                    designation = (auditorType.substring(0, 1).toUpperCase() + auditorType.substring(1)) + " Administrative Auditor";
                 }
+                post = administrativePosts.get(0);
             } else {
                 throw new IllegalArgumentException("Invalid category for auditor.");
             }
             
-            return new ValidatedUser(name, email, cleanPassword(password), role, school, designation, accountType, category, auditorType, auditorRole, post);
+            return new ValidatedUser(name, email, cleanPassword(password), role, school, designation, accountType, category, auditorType, auditorRole, post, administrativePosts);
         }
 
         if (isBlank(category)) {
@@ -337,7 +346,7 @@ public class UserController {
                 throw new IllegalArgumentException("Invalid academic school.");
             }
             school = SchoolUtils.canonicalizeSchool(school);
-            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation, "user", "academic", null, null, null);
+            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation, "user", "academic", null, null, null, List.of());
         }
 
         if ("administrative".equals(category)) {
@@ -360,7 +369,7 @@ public class UserController {
             if (!isBlank(designation) && !mappedDesignation.equals(designation)) {
                 throw new IllegalArgumentException("Designation must match selected administrative post.");
             }
-            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation, "user", "administrative", null, null, post);
+            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation, "user", "administrative", null, null, post, List.of());
         }
 
         throw new IllegalArgumentException("Invalid category.");
@@ -403,6 +412,7 @@ public class UserController {
         response.put("school", user.getSchool());
         response.put("designation", user.getDesignation());
         response.put("post", user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null));
+        response.put("administrativePosts", getAdministrativePosts(user));
         
         response.put("accountType", accountType);
         response.put("auditorType", user.getAuditorType());
@@ -435,6 +445,58 @@ public class UserController {
                 "message", message));
     }
 
+    private void saveAdministrativePosts(User user, List<String> administrativePosts) {
+        userAdministrativePostRepository.deleteByUserId(user.getId());
+        if (administrativePosts == null || administrativePosts.isEmpty()) {
+            return;
+        }
+        administrativePosts.forEach(post -> userAdministrativePostRepository.save(UserAdministrativePost.builder()
+                .userId(user.getId())
+                .post(post)
+                .build()));
+    }
+
+    private List<String> getAdministrativePosts(User user) {
+        if (user.getId() == null) {
+            return List.of();
+        }
+        List<String> posts = userAdministrativePostRepository.findByUserId(user.getId()).stream()
+                .map(UserAdministrativePost::getPost)
+                .toList();
+        if (!posts.isEmpty()) {
+            return posts;
+        }
+        String role = normalize(user.getRole());
+        String accountType = normalize(user.getAccountType());
+        if ("auditor".equals(accountType) && "administrative".equals(normalize(user.getCategory())) && user.getPost() != null) {
+            return List.of(user.getPost());
+        }
+        if ("administrative".equals(role) && user.getPost() != null) {
+            return List.of(user.getPost());
+        }
+        return List.of();
+    }
+
+    private List<String> normalizeAdministrativePosts(List<String> posts) {
+        if (posts == null) {
+            return List.of();
+        }
+        Set<String> seen = new java.util.LinkedHashSet<>();
+        for (String rawPost : posts) {
+            String post = normalize(rawPost);
+            if (isBlank(post)) {
+                continue;
+            }
+            if (!ADMINISTRATIVE_POSTS.containsKey(post)) {
+                throw new IllegalArgumentException("Invalid administrative post.");
+            }
+            if (!seen.add(post)) {
+                throw new IllegalArgumentException("Duplicate administrative post: " + post);
+            }
+        }
+        return List.copyOf(seen);
+    }
+
     private String clean(String value) {
         return value == null ? null : value.trim();
     }
@@ -453,7 +515,8 @@ public class UserController {
 
     private record ValidatedUser(
         String name, String email, String password, String role, String school, String designation,
-        String accountType, String category, String auditorType, String auditorRole, String post
+        String accountType, String category, String auditorType, String auditorRole, String post,
+        List<String> administrativePosts
     ) {}
 
     @Data
@@ -471,5 +534,6 @@ public class UserController {
         private String auditCategory;
         private String auditorType;
         private String auditorRole;
+        private List<String> administrativePosts;
     }
 }

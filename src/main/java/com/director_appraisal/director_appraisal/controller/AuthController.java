@@ -1,6 +1,8 @@
 package com.director_appraisal.director_appraisal.controller;
 
 import com.director_appraisal.director_appraisal.model.User;
+import com.director_appraisal.director_appraisal.model.UserAdministrativePost;
+import com.director_appraisal.director_appraisal.repository.UserAdministrativePostRepository;
 import com.director_appraisal.director_appraisal.service.AcademicYearService;
 import com.director_appraisal.director_appraisal.service.JwtService;
 import com.director_appraisal.director_appraisal.service.UserService;
@@ -20,6 +22,7 @@ public class AuthController {
     private final UserService userService;
     private final JwtService jwtService;
     private final AcademicYearService academicYearService;
+    private final UserAdministrativePostRepository userAdministrativePostRepository;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
@@ -35,13 +38,16 @@ public class AuthController {
 
         String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
 
+        java.util.List<String> administrativePosts = getAdministrativePosts(user);
+
         // Generate JWT Token
         String token = jwtService.generateToken(user, Map.of(
                 "name", user.getName(),
                 "designation", user.getDesignation(),
                 "school", user.getSchool(),
                 "role", user.getRole(),
-                "currentAcademicYear", currentAcademicYear
+                "currentAcademicYear", currentAcademicYear,
+                "administrativePosts", administrativePosts
         ));
 
         return ResponseEntity.ok(new LoginResponse(
@@ -58,7 +64,8 @@ public class AuthController {
                 user.getAuditorType(),
                 user.getAuditorRole(),
                 user.getPost(),
-                currentAcademicYear
+                currentAcademicYear,
+                administrativePosts
         ));
     }
 
@@ -123,5 +130,22 @@ public class AuthController {
         private final String auditorRole;
         private final String post;
         private final String currentAcademicYear;
+        private final java.util.List<String> administrativePosts;
+    }
+
+    private java.util.List<String> getAdministrativePosts(User user) {
+        if (user.getId() == null) {
+            return java.util.List.of();
+        }
+        java.util.List<String> posts = userAdministrativePostRepository.findByUserId(user.getId()).stream()
+                .map(UserAdministrativePost::getPost)
+                .toList();
+        if (!posts.isEmpty()) {
+            return posts;
+        }
+        if ("administrative".equalsIgnoreCase(user.getCategory()) && user.getPost() != null) {
+            return java.util.List.of(user.getPost());
+        }
+        return java.util.List.of();
     }
 }

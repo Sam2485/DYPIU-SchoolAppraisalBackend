@@ -157,6 +157,12 @@ public class SubmissionController {
         return ResponseEntity.ok(submissions);
     }
 
+    @GetMapping("/previous-reports")
+    @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")
+    public ResponseEntity<List<Submission>> getPreviousReports(@RequestParam(required = false) String academicYear) {
+        return ResponseEntity.ok(submissionService.getPreviousReports(getCurrentUserDetails(), academicYear));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Submission> getSubmissionById(@PathVariable Long id) {
         String email = getCurrentUserEmail();
@@ -305,7 +311,7 @@ public class SubmissionController {
             }
         }
 
-        // Collect all attachments from submission metadata, valuesData, and tablesData
+        // submission.attachments is primary; tablesData is only a fallback to avoid duplicate ZIP entries.
         List<ExtractedAttachment> attachments = new java.util.ArrayList<>();
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         
@@ -313,15 +319,13 @@ public class SubmissionController {
             if (submission.getAttachments() != null && !submission.getAttachments().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getAttachments()), attachments);
             }
-            if (submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
-                collectAttachments(mapper.readTree(submission.getValuesData()), attachments);
-            }
-            if (submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
+            if (attachments.isEmpty() && submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getTablesData()), attachments);
             }
         } catch (Exception e) {
             // Ignore parse errors, just use what we can parse
         }
+        attachments = deduplicateAttachments(attachments);
 
         if (attachments.isEmpty()) {
             throw new com.director_appraisal.director_appraisal.exception.NotFoundException("No attachments found for this submission");
@@ -371,6 +375,7 @@ public class SubmissionController {
                     }
                     zos.closeEntry();
                 } catch (Exception e) {
+                    System.err.println("Skipping inaccessible attachment: " + att.url + " - " + e.getMessage());
                     missingFiles.add("File: " + att.fileName + ", URL: " + att.url + ", Error: " + e.getMessage());
                 }
             }
@@ -393,6 +398,7 @@ public class SubmissionController {
                 if (url.startsWith("/uploads/") || url.contains(".storage.googleapis.com") || url.contains("storage.googleapis.com")) {
                     ExtractedAttachment att = new ExtractedAttachment();
                     att.url = url;
+                    att.objectKey = extractObjectKey(url);
                     
                     if (node.has("fileName") && node.get("fileName").isTextual()) {
                         att.fileName = node.get("fileName").asText();
@@ -415,6 +421,26 @@ public class SubmissionController {
                     if (node.has("column") && node.get("column").isTextual()) {
                         att.column = node.get("column").asText();
                     }
+                    if (node.has("id")) {
+                        att.id = node.get("id").asText();
+                    } else if (node.has("attachmentId")) {
+                        att.id = node.get("attachmentId").asText();
+                    }
+                    if (node.has("objectKey")) {
+                        att.objectKey = node.get("objectKey").asText();
+                    } else if (node.has("storageObjectKey")) {
+                        att.objectKey = node.get("storageObjectKey").asText();
+                    }
+                    if (node.has("checksum")) {
+                        att.checksum = node.get("checksum").asText();
+                    } else if (node.has("sha256")) {
+                        att.checksum = node.get("sha256").asText();
+                    }
+                    if (node.has("size")) {
+                        att.size = node.get("size").asText();
+                    } else if (node.has("fileSize")) {
+                        att.size = node.get("fileSize").asText();
+                    }
                     list.add(att);
                 }
             }
@@ -424,6 +450,83 @@ public class SubmissionController {
                 collectAttachments(item, list);
             }
         }
+    }
+
+    private List<ExtractedAttachment> deduplicateAttachments(List<ExtractedAttachment> attachments) {
+        java.util.Map<String, ExtractedAttachment> byKey = new java.util.LinkedHashMap<>();
+        List<ExtractedAttachment> noKey = new java.util.ArrayList<>();
+        for (ExtractedAttachment attachment : attachments) {
+            String key = attachmentIdentityKey(attachment);
+            if (key == null) {
+                noKey.add(attachment);
+                continue;
+            }
+            if (byKey.containsKey(key)) {
+                System.err.println("Skipping duplicate attachment in ZIP: " + key);
+                continue;
+            }
+            byKey.put(key, attachment);
+        }
+        List<ExtractedAttachment> result = new java.util.ArrayList<>(byKey.values());
+        result.addAll(noKey);
+        return result;
+    }
+
+    private String attachmentIdentityKey(ExtractedAttachment attachment) {
+        if (notBlank(attachment.id)) {
+            return "id:" + attachment.id.trim();
+        }
+        if (notBlank(attachment.objectKey)) {
+            return "key:" + normalizeAttachmentUrl(attachment.objectKey);
+        }
+        if (notBlank(attachment.url)) {
+            return "url:" + normalizeAttachmentUrl(attachment.url);
+        }
+        if (notBlank(attachment.checksum)) {
+            return "checksum:" + attachment.checksum.trim().toLowerCase();
+        }
+        if (notBlank(attachment.fileName) && notBlank(attachment.size)) {
+            return "name-size:" + attachment.fileName.trim().toLowerCase() + ":" + attachment.size.trim();
+        }
+        return null;
+    }
+
+    private String extractObjectKey(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        if (url.startsWith("/uploads/")) {
+            return url.substring("/uploads/".length());
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String path = uri.getPath();
+            if (path == null || path.isBlank()) {
+                return null;
+            }
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            int bucketSeparator = path.indexOf('/');
+            if ("storage.googleapis.com".equalsIgnoreCase(uri.getHost()) && bucketSeparator >= 0) {
+                return path.substring(bucketSeparator + 1);
+            }
+            return path;
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    private String normalizeAttachmentUrl(String value) {
+        String normalized = value == null ? "" : value.trim().replace("\\", "/");
+        while (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized.toLowerCase();
+    }
+
+    private boolean notBlank(String value) {
+        return value != null && !value.isBlank();
     }
 
     private String getZipFileName(Submission submission) {
@@ -441,7 +544,7 @@ public class SubmissionController {
             entityName = "Unknown";
         }
         entityName = entityName.replaceAll("[^A-Za-z0-9._-]", "_");
-        String cycle = submission.getAcademicYear() != null ? submission.getAcademicYear() : submission.getAuditCycle();
+        String cycle = submission.getAuditCycle() != null ? submission.getAuditCycle() : submission.getAcademicYear();
         if (cycle == null || cycle.isBlank()) {
             cycle = "2025-2026";
         }
@@ -507,5 +610,9 @@ public class SubmissionController {
         private String tableId;
         private Integer rowIndex;
         private String column;
+        private String id;
+        private String objectKey;
+        private String checksum;
+        private String size;
     }
 }

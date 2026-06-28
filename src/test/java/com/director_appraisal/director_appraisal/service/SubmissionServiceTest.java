@@ -7,6 +7,7 @@ import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionAuditorAssignmentRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
+import com.director_appraisal.director_appraisal.repository.UserAdministrativePostRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,9 @@ class SubmissionServiceTest {
 
     @Mock
     private AcademicYearService academicYearService;
+
+    @Mock
+    private UserAdministrativePostRepository userAdministrativePostRepository;
 
     @InjectMocks
     private SubmissionService submissionService;

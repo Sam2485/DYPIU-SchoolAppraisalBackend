@@ -94,6 +94,7 @@ public class AcademicYearService {
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("academicYear", next);
+        response.put("auditCycle", toAuditCycle(next));
         response.put("previousAcademicYear", current);
         response.put("academicFormsCreated", academicFormsCreated);
         response.put("administrativeFormsCreated", administrativeFormsCreated);
@@ -110,8 +111,9 @@ public class AcademicYearService {
                 .status("DRAFT")
                 .version(1)
                 .academicYear(academicYear)
-                .auditCycle(academicYear)
+                .auditCycle(toAuditCycle(academicYear))
                 .reportCategory("INTERNAL")
+                .schoolGroup("academic".equals(auditType) ? SchoolUtils.schoolGroup(school) : null)
                 .valuesData("{}")
                 .tablesData("{}")
                 .attachments("[]")
@@ -155,6 +157,11 @@ public class AcademicYearService {
             throw new IllegalArgumentException("Academic year is required");
         }
         return value.trim();
+    }
+
+    private String toAuditCycle(String academicYear) {
+        int[] parts = parseYear(academicYear);
+        return parts[0] + "-" + String.valueOf(parts[1]).substring(2);
     }
 
     private String normalize(String value) {
