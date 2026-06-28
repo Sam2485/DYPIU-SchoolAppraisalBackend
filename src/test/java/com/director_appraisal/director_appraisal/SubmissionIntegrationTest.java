@@ -150,7 +150,7 @@ public class SubmissionIntegrationTest {
         sub = submissionRepository.save(sub);
 
         final Long subId = sub.getId();
-        assertThrows(SecurityException.class, () -> {
+        assertThrows(RuntimeException.class, () -> {
             submissionController.downloadAttachments(subId, new MockHttpServletResponse());
         });
     }

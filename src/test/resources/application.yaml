@@ -1,0 +1,55 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: director-appraisal
+  
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 100MB
+
+  # ── Test Database ─────────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:h2:mem:director_appraisal;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false
+
+  flyway:
+    enabled: false
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: your-email@gmail.com
+    password: your-app-password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+app:
+  jwt:
+    secret: SecretKeyForJWTAppraisalMustBeAtLeast256BitsLongForHMACSHA256
+    expiration-ms: 86400000
+  gcp:
+    enabled: false
+    bucket-name: director-appraisal-attachments
+    project-id: director-appraisal-project
+  upload:
+    local-path: ./uploads
+  frontend-url: http://localhost:5173
+  mail:
+    from: your-email@gmail.com

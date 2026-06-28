@@ -24,6 +24,9 @@ public class AuthController {
     private final AcademicYearService academicYearService;
     private final UserAdministrativePostRepository userAdministrativePostRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.gcp.enabled:false}")
+    private boolean gcpEnabled;
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
         String email = loginRequest.getUsername().trim().toLowerCase();
@@ -80,11 +83,16 @@ public class AuthController {
 
         try {
             String token = userService.createPasswordResetToken(email);
-            // Returns the token directly in the response for development convenience
-            return ResponseEntity.ok(Map.of(
-                    "message", "If that email is registered, a reset link has been generated.",
-                    "token", token
-            ));
+            if (gcpEnabled) {
+                return ResponseEntity.ok(Map.of(
+                        "message", "If that email is registered, a reset link has been generated."
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "message", "If that email is registered, a reset link has been generated.",
+                        "token", token
+                ));
+            }
         } catch (Exception e) {
             // Standard safety practice: return identical response even if user email doesn't exist
             return ResponseEntity.ok(Map.of(

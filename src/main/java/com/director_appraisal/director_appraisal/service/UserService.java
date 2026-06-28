@@ -20,6 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@Transactional(readOnly = true)
 public class UserService implements UserDetailsService {
 
     private final UserRepository userRepository;
@@ -58,6 +59,7 @@ public class UserService implements UserDetailsService {
         return userRepository.findById(id);
     }
 
+    @Transactional
     public User createUser(User user) {
         if (userRepository.existsByEmail(user.getEmail())) {
             throw new IllegalArgumentException("User with email " + user.getEmail() + " already exists.");
@@ -66,10 +68,12 @@ public class UserService implements UserDetailsService {
         return userRepository.save(user);
     }
 
+    @Transactional
     public void deleteUser(User user) {
         userRepository.delete(user);
     }
 
+    @Transactional
     public User updateUser(User user, String rawPassword) {
         if (rawPassword != null && !rawPassword.isBlank()) {
             user.setPassword(passwordEncoder.encode(rawPassword));
