@@ -331,6 +331,13 @@ public class UserController {
             return new ValidatedUser(name, email, cleanPassword(password), role, school, designation, accountType, category, auditorType, auditorRole, post, administrativePosts);
         }
 
+        if ("iqac".equals(role) || "vice-chancellor".equals(role)) {
+            String reviewerDesignation = isBlank(designation)
+                    ? ("iqac".equals(role) ? "IQAC" : "Vice Chancellor")
+                    : designation;
+            return new ValidatedUser(name, email, cleanPassword(password), role, null, reviewerDesignation, "reviewer", null, null, null, null, List.of());
+        }
+
         if (isBlank(category)) {
             throw new IllegalArgumentException("Category is required.");
         }
@@ -409,7 +416,7 @@ public class UserController {
         response.put("email", user.getEmail());
         response.put("category", category);
         response.put("role", role);
-        response.put("school", user.getSchool());
+        response.put("school", isReviewerRole(role) ? null : user.getSchool());
         response.put("designation", user.getDesignation());
         response.put("post", canonicalAdministrativePost(user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null)));
         response.put("administrativePosts", getAdministrativePosts(user));
@@ -521,6 +528,10 @@ public class UserController {
             case "dean-placement", "placement", "dean-of-placement" -> "dean-placement";
             default -> normalized;
         };
+    }
+
+    private boolean isReviewerRole(String role) {
+        return "iqac".equalsIgnoreCase(role) || "vice-chancellor".equalsIgnoreCase(role);
     }
 
     private String cleanPassword(String value) {

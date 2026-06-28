@@ -29,6 +29,9 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+        if (loginRequest == null || loginRequest.getUsername() == null || loginRequest.getPassword() == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Username and password are required."));
+        }
         String email = loginRequest.getUsername().trim().toLowerCase();
         String password = loginRequest.getPassword();
 
@@ -43,25 +46,28 @@ public class AuthController {
 
         java.util.List<String> administrativePosts = getAdministrativePosts(user);
         String canonicalPost = canonicalAdministrativePost(user.getPost());
+        String role = user.getRole();
+        String school = isReviewerRole(role) ? null : user.getSchool();
+
+        Map<String, Object> claims = new java.util.LinkedHashMap<>();
+        putClaim(claims, "name", user.getName());
+        putClaim(claims, "designation", user.getDesignation());
+        putClaim(claims, "school", school);
+        putClaim(claims, "role", role);
+        putClaim(claims, "post", canonicalPost);
+        putClaim(claims, "currentAcademicYear", currentAcademicYear);
+        claims.put("administrativePosts", administrativePosts);
 
         // Generate JWT Token
-        String token = jwtService.generateToken(user, Map.of(
-                "name", user.getName(),
-                "designation", user.getDesignation(),
-                "school", user.getSchool(),
-                "role", user.getRole(),
-                "post", canonicalPost,
-                "currentAcademicYear", currentAcademicYear,
-                "administrativePosts", administrativePosts
-        ));
+        String token = jwtService.generateToken(user, claims);
 
         return ResponseEntity.ok(new LoginResponse(
                 token,
                 user.getEmail(),
                 user.getName(),
                 user.getDesignation(),
-                user.getSchool(),
-                user.getRole(),
+                school,
+                role,
                 user.getId(),
                 user.getId(),
                 user.getAccountType(),
@@ -114,7 +120,7 @@ public class AuthController {
             userService.resetPassword(token, newPassword);
             return ResponseEntity.ok(Map.of("message", "Password has been reset successfully."));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("message", safeMessage(e, "Unable to reset password.")));
         }
     }
 
@@ -174,5 +180,19 @@ public class AuthController {
             case "dean-placement", "placement", "dean-of-placement" -> "dean-placement";
             default -> normalized;
         };
+    }
+
+    private void putClaim(Map<String, Object> claims, String key, Object value) {
+        if (value != null) {
+            claims.put(key, value);
+        }
+    }
+
+    private boolean isReviewerRole(String role) {
+        return "iqac".equalsIgnoreCase(role) || "vice-chancellor".equalsIgnoreCase(role);
+    }
+
+    private String safeMessage(Exception e, String fallback) {
+        return e.getMessage() != null ? e.getMessage() : fallback;
     }
 }
