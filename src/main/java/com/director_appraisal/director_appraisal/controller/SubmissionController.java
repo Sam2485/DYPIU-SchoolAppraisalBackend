@@ -51,6 +51,19 @@ public class SubmissionController {
         return ResponseEntity.ok(draft);
     }
 
+    @GetMapping("/administrative/{cycleId}/status")
+    public ResponseEntity<Object> getAdministrativeStatus(@PathVariable String cycleId) {
+        Submission submission = submissionService.getOrCreateSharedAdministrativeDraftForCycle(cycleId);
+        return ResponseEntity.ok(submission.getSubmittedByForJson());
+    }
+
+    @PostMapping("/administrative/{cycleId}/submit")
+    public ResponseEntity<Submission> submitAdministrativePart(@PathVariable String cycleId) {
+        User caller = getCurrentUserDetails();
+        Submission submitted = submissionService.submitAdministrativePart(cycleId, caller);
+        return ResponseEntity.ok(submitted);
+    }
+
     private String normalizeAuditType(String auditType) {
         if (auditType == null || auditType.isBlank() || "null".equalsIgnoreCase(auditType.trim())) {
             throw new IllegalArgumentException("Audit type is required");

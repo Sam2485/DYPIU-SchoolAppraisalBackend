@@ -424,14 +424,14 @@ public class SubmissionIntegrationTest {
             }
         }
 
-        assertTrue(entryNames.contains("Part-A/summary.pdf"));
-        assertTrue(entryNames.contains("Part-A/student.pdf"));
-        assertTrue(entryNames.contains("Part-D/hackathon.pdf"));
-        assertTrue(entryNames.contains("Part-D/cultural.pdf"));
-        assertTrue(entryNames.contains("Part-D/sports.pdf"));
-        assertTrue(entryNames.contains("Part-D/community.pdf"));
-        assertTrue(entryNames.contains("Part-D/award.pdf"));
-        assertTrue(entryNames.contains("Part-D/shared.pdf"));
+        assertTrue(entryNames.contains("Registrar/Part-A/summary.pdf"));
+        assertTrue(entryNames.contains("Registrar/Part-A/student.pdf"));
+        assertTrue(entryNames.contains("Dean-Student-Welfare/Part-D/hackathon.pdf"));
+        assertTrue(entryNames.contains("Dean-Student-Welfare/Part-D/cultural.pdf"));
+        assertTrue(entryNames.contains("Dean-Student-Welfare/Part-D/sports.pdf"));
+        assertTrue(entryNames.contains("Dean-Student-Welfare/Part-D/community.pdf"));
+        assertTrue(entryNames.contains("Dean-Student-Welfare/Part-D/award.pdf"));
+        assertTrue(entryNames.contains("Dean-Student-Welfare/Part-D/shared.pdf"));
         assertEquals(8, entryNames.size());
     }
 

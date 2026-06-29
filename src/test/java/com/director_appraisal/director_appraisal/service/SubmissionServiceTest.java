@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -699,5 +700,82 @@ class SubmissionServiceTest {
         assertTrue(updated.getValuesData().contains("\"registrar\":\"APPROVED\""));
         assertTrue(updated.getValuesData().contains("\"hr\":\"DRAFT\""));
         assertTrue(updated.getValuesData().contains("\"administrativeApprovals\""));
+    }
+
+    @Test
+    void testSectionPermissionEnforcement() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User hr = User.builder().email("hr@dypiu.ac.in").role("administrative").post("hr").build();
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+
+        // HR attempts to edit section A (owned by Registrar)
+        assertThrows(SecurityException.class, () -> submissionService.updateSharedAdministrativeContribution(
+                500L,
+                hr,
+                null,
+                "hr",
+                List.of("A"),
+                "{\"universityName\":\"New Name\"}",
+                "{}",
+                "[]"
+        ));
+    }
+
+    @Test
+    void testAutomaticStatusTransitionWhenAllSubmissionsComplete() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"SUBMITTED\",\"hr\":\"SUBMITTED\",\"dean-student-welfare\":\"SUBMITTED\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User deanPlacement = User.builder().email("placement@dypiu.ac.in").role("administrative").post("dean-placement").name("Dean").build();
+        when(submissionRepository.findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(anyString(), anyString(), anyString())).thenReturn(Optional.of(shared));
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Submit the last part (dean-placement)
+        Submission result = submissionService.submitAdministrativePart("2025-2026", deanPlacement);
+
+        assertEquals("SUBMITTED", result.getStatus());
+        assertNotNull(result.getSubmittedAt());
+    }
+
+    @Test
+    void testLockingSubmittedSections() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"SUBMITTED\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User registrar = User.builder().email("registrar@dypiu.ac.in").role("administrative").post("registrar").build();
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+
+        // Registrar attempts to edit their already-submitted section
+        assertThrows(SecurityException.class, () -> submissionService.updateSharedAdministrativeContribution(
+                500L,
+                registrar,
+                null,
+                "registrar",
+                List.of("A"),
+                "{\"universityName\":\"Edited\"}",
+                "{}",
+                "[]"
+        ));
     }
 }

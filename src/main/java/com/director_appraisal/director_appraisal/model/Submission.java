@@ -27,7 +27,13 @@ public class Submission {
     private String auditType; // academic, administrative
 
     private String school;
+    
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String submittedBy;
+    
+    @Column(columnDefinition = "TEXT")
+    private String submittedByDetails;
+
     private LocalDateTime submittedAt;
 
     @Column(nullable = false)
@@ -154,5 +160,34 @@ public class Submission {
             return progress;
         }
         return progress;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("submittedBy")
+    public Object getSubmittedByForJson() {
+        if ("administrative".equalsIgnoreCase(auditType)) {
+            if (submittedByDetails != null && !submittedByDetails.isBlank()) {
+                try {
+                    return new com.fasterxml.jackson.databind.ObjectMapper().readTree(submittedByDetails);
+                } catch (Exception ignored) {}
+            }
+            return defaultSubmittedByDetails();
+        }
+        return submittedBy;
+    }
+
+    private Object defaultSubmittedByDetails() {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode node = mapper.createObjectNode();
+        
+        String[] keys = {"registrar", "hr", "deanStudentWelfare", "deanPlacement"};
+        for (String key : keys) {
+            com.fasterxml.jackson.databind.node.ObjectNode roleNode = mapper.createObjectNode();
+            roleNode.put("submitted", false);
+            roleNode.putNull("submittedAt");
+            roleNode.putNull("name");
+            roleNode.putNull("email");
+            node.set(key, roleNode);
+        }
+        return node;
     }
 }

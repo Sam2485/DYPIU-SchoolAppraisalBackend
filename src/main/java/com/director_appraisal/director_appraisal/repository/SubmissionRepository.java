@@ -15,6 +15,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     Optional<Submission> findFirstByEmailAndAuditTypeOrderByIdDesc(String email, String auditType);
     Optional<Submission> findFirstByEmailAndAuditTypeAndAcademicYearAndStatusInOrderByIdDesc(String email, String auditType, String academicYear, List<String> statuses);
     Optional<Submission> findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(String email, String auditType, String academicYear);
+    Optional<Submission> findFirstByEmailAndAuditTypeAndAuditCycleOrderByIdDesc(String email, String auditType, String auditCycle);
     boolean existsByEmailAndAuditTypeAndAcademicYearAndVersion(String email, String auditType, String academicYear, Integer version);
     List<Submission> findByStatusIn(List<String> statuses);
     List<Submission> findByAuditTypeAndStatusIn(String auditType, List<String> statuses);

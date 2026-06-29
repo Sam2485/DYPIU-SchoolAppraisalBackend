@@ -33,7 +33,7 @@ public class SubmissionService {
     private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
-    private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED");
+    private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED", "SENT_BACK");
     private static final List<String> ADMIN_POSTS = List.of("registrar", "hr", "dean-student-welfare", "dean-placement");
     private static final String SHARED_ADMINISTRATIVE_EMAIL = "administrative.shared@dypiu.ac.in";
 
@@ -52,8 +52,37 @@ public class SubmissionService {
             throw new SecurityException("Only administrative authorities can access the shared administrative form");
         }
         String academicYear = academicYearService.getCurrentAcademicYearLabel();
+        return getOrCreateSharedAdministrativeDraftForCycle(academicYear);
+    }
+
+    @Transactional
+    public Submission getOrCreateSharedAdministrativeDraftForCycle(String cycleId) {
+        if (cycleId == null || cycleId.isBlank()) {
+            cycleId = academicYearService != null ? academicYearService.getCurrentAcademicYearLabel() : null;
+            if (cycleId == null || cycleId.isBlank()) {
+                cycleId = "2025-2026";
+            }
+        }
+        String academicYear;
+        String auditCycle;
+        if (cycleId.length() == 9 && cycleId.contains("-")) { // e.g. 2025-2026
+            academicYear = cycleId;
+            String[] parts = cycleId.split("-");
+            auditCycle = parts[0] + "-" + parts[1].substring(2);
+        } else if (cycleId.length() == 7 && cycleId.contains("-")) { // e.g. 2025-26
+            auditCycle = cycleId;
+            String[] parts = cycleId.split("-");
+            academicYear = parts[0] + "-20" + parts[1]; // e.g. 2025-2026
+        } else {
+            academicYear = cycleId;
+            auditCycle = cycleId;
+        }
+
         Optional<Submission> existing = submissionRepository.findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(
-                SHARED_ADMINISTRATIVE_EMAIL, "administrative", academicYear);
+                SHARED_ADMINISTRATIVE_EMAIL, "administrative", academicYear)
+            .or(() -> submissionRepository.findFirstByEmailAndAuditTypeAndAuditCycleOrderByIdDesc(
+                SHARED_ADMINISTRATIVE_EMAIL, "administrative", auditCycle));
+
         if (existing.isPresent()) {
             return existing.get();
         }
@@ -68,7 +97,7 @@ public class SubmissionService {
                 .tablesData(defaultSharedAdministrativeTablesData())
                 .attachments("[]")
                 .academicYear(academicYear)
-                .auditCycle(toAuditCycle(academicYear))
+                .auditCycle(auditCycle)
                 .reportCategory("INTERNAL")
                 .version(1)
                 .hasNextCycle(false)
@@ -79,13 +108,111 @@ public class SubmissionService {
     }
 
     @Transactional
+    public Submission submitAdministrativePart(String cycleId, User caller) {
+        if (cycleId == null || cycleId.isBlank()) {
+            cycleId = academicYearService != null ? academicYearService.getCurrentAcademicYearLabel() : null;
+            if (cycleId == null || cycleId.isBlank()) {
+                cycleId = "2025-2026";
+            }
+        }
+        if (caller == null || !"administrative".equalsIgnoreCase(caller.getRole())) {
+            throw new SecurityException("Only administrative authorities can submit sections");
+        }
+        String post = canonicalAdministrativePost(caller.getPost());
+        if (post == null) {
+            throw new SecurityException("Administrative post is required");
+        }
+
+        Submission submission = getOrCreateSharedAdministrativeDraftForCycle(cycleId);
+        
+        // Concurrency safety: row-level lock
+        Submission lockedSubmission = submissionRepository.findByIdForUpdate(submission.getId())
+                .orElseThrow(() -> new IllegalStateException("Submission went missing"));
+
+        if ("SUBMITTED".equalsIgnoreCase(lockedSubmission.getStatus()) 
+                || LOCKED_STATUSES.contains(lockedSubmission.getStatus().toUpperCase())) {
+            return lockedSubmission;
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode valuesNode = objectNodeOrEmpty(mapper, lockedSubmission.getValuesData());
+            com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, valuesNode);
+
+            progress.put(post, "SUBMITTED");
+            valuesNode.set("administrativeProgress", progress);
+            lockedSubmission.setValuesData(mapper.writeValueAsString(valuesNode));
+
+            com.fasterxml.jackson.databind.node.ObjectNode detailsNode;
+            if (lockedSubmission.getSubmittedByDetails() != null && !lockedSubmission.getSubmittedByDetails().isBlank()) {
+                detailsNode = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(lockedSubmission.getSubmittedByDetails());
+            } else {
+                detailsNode = mapper.createObjectNode();
+            }
+
+            String jsonKey = toCamelCaseRole(post);
+            com.fasterxml.jackson.databind.node.ObjectNode roleInfo = mapper.createObjectNode();
+            roleInfo.put("submitted", true);
+            roleInfo.put("submittedAt", LocalDateTime.now().toString());
+            roleInfo.put("name", caller.getName());
+            roleInfo.put("email", caller.getEmail());
+            detailsNode.set(jsonKey, roleInfo);
+
+            for (String p : ADMIN_POSTS) {
+                String k = toCamelCaseRole(p);
+                if (!detailsNode.has(k)) {
+                    com.fasterxml.jackson.databind.node.ObjectNode emptyInfo = mapper.createObjectNode();
+                    emptyInfo.put("submitted", false);
+                    emptyInfo.putNull("submittedAt");
+                    emptyInfo.putNull("name");
+                    emptyInfo.putNull("email");
+                    detailsNode.set(k, emptyInfo);
+                }
+            }
+
+            lockedSubmission.setSubmittedByDetails(mapper.writeValueAsString(detailsNode));
+
+            boolean allSubmitted = ADMIN_POSTS.stream()
+                    .allMatch(requiredPost -> {
+                        String st = progress.path(requiredPost).asText("DRAFT");
+                        return "SUBMITTED".equalsIgnoreCase(st) || "APPROVED".equalsIgnoreCase(st);
+                    });
+
+            if (allSubmitted) {
+                lockedSubmission.setStatus("SUBMITTED");
+                lockedSubmission.setSubmittedAt(LocalDateTime.now());
+            }
+
+            Submission saved = submissionRepository.save(lockedSubmission);
+            persistDataForStatus(saved);
+            return saved;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to process submission", e);
+        }
+    }
+
+    private String toCamelCaseRole(String post) {
+        return switch (post) {
+            case "registrar" -> "registrar";
+            case "hr" -> "hr";
+            case "dean-student-welfare" -> "deanStudentWelfare";
+            case "dean-placement" -> "deanPlacement";
+            default -> post;
+        };
+    }
+
+    @Transactional
     public Submission saveSharedAdministrativeContribution(User caller, String contributorPost, List<String> sections,
                                                           String valuesData, String tablesData, String attachments,
                                                           boolean submitContribution) {
         Submission submission = getOrCreateSharedAdministrativeDraft(caller);
-        return mergeSharedAdministrativeContribution(submission.getId(), caller,
-                submitContribution ? "APPROVE_CONTRIBUTION" : null,
+        Submission merged = mergeSharedAdministrativeContribution(submission.getId(), caller,
+                null,
                 contributorPost, sections, valuesData, tablesData, attachments);
+        if (submitContribution) {
+            return submitAdministrativePart(merged.getAcademicYear(), caller);
+        }
+        return merged;
     }
 
     @Transactional
@@ -104,7 +231,8 @@ public class SubmissionService {
                 || !"administrative".equalsIgnoreCase(submission.getAuditType())) {
             throw new IllegalArgumentException("Submission is not the shared administrative form");
         }
-        if (!"DRAFT".equalsIgnoreCase(submission.getStatus())) {
+        String currentStatus = submission.getStatus();
+        if (!"DRAFT".equalsIgnoreCase(currentStatus) && !"SENT_BACK".equalsIgnoreCase(currentStatus)) {
             throw new SecurityException("Shared administrative form is locked");
         }
 
@@ -131,10 +259,11 @@ public class SubmissionService {
         try {
             com.fasterxml.jackson.databind.node.ObjectNode existingValues = objectNodeOrEmpty(mapper, submission.getValuesData());
             com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, existingValues);
-            if (approving && "APPROVED".equalsIgnoreCase(progress.path(callerPost).asText())) {
+            String postProgress = progress.path(callerPost).asText();
+            if (approving && ("APPROVED".equalsIgnoreCase(postProgress) || "SUBMITTED".equalsIgnoreCase(postProgress))) {
                 throw new ConflictException("Contribution has already been approved");
             }
-            if ("APPROVED".equalsIgnoreCase(progress.path(callerPost).asText())) {
+            if ("APPROVED".equalsIgnoreCase(postProgress) || "SUBMITTED".equalsIgnoreCase(postProgress)) {
                 throw new SecurityException("Approved contribution is locked");
             }
 
@@ -168,7 +297,10 @@ public class SubmissionService {
             submission.setAttachments(preparedAttachments);
 
             boolean allApproved = ADMIN_POSTS.stream()
-                    .allMatch(post -> "APPROVED".equalsIgnoreCase(mergedProgress.path(post).asText("DRAFT")));
+                    .allMatch(post -> {
+                        String st = mergedProgress.path(post).asText("DRAFT");
+                        return "APPROVED".equalsIgnoreCase(st) || "SUBMITTED".equalsIgnoreCase(st);
+                    });
             if (allApproved) {
                 submission.setStatus("SUBMITTED");
                 submission.setSubmittedAt(LocalDateTime.now());
@@ -345,9 +477,24 @@ public class SubmissionService {
 
         String requestedStatus = status.toUpperCase();
         if ("SENT_BACK".equals(requestedStatus)) {
-            throw new IllegalArgumentException("Send back workflow is disabled.");
+            if (!"administrative".equalsIgnoreCase(submission.getAuditType())) {
+                throw new IllegalArgumentException("Send back workflow is disabled.");
+            }
+            submission.setStatus("SENT_BACK");
+            submission.setRemarks(remarks);
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                com.fasterxml.jackson.databind.node.ObjectNode valuesNode = objectNodeOrEmpty(mapper, submission.getValuesData());
+                com.fasterxml.jackson.databind.node.ObjectNode progress = mapper.createObjectNode();
+                ADMIN_POSTS.forEach(post -> progress.put(post, "DRAFT"));
+                valuesNode.set("administrativeProgress", progress);
+                submission.setValuesData(mapper.writeValueAsString(valuesNode));
+            } catch (Exception ignored) {}
+            submission.setSubmittedByDetails(null);
+            submission.setSubmittedAt(null);
+            return submissionRepository.save(submission);
         }
-        if (!List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "UNDER_REVIEW").contains(requestedStatus)) {
+        if (!List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL, "UNDER_REVIEW", "SENT_BACK").contains(requestedStatus)) {
             throw new IllegalArgumentException("Invalid review status: " + status);
         }
 
@@ -723,7 +870,20 @@ public class SubmissionService {
         if (status != null && !status.isBlank()) {
             String upperStatus = status.toUpperCase();
             if ("SENT_BACK".equals(upperStatus)) {
-                throw new IllegalArgumentException("Send back workflow is disabled.");
+                if (!"administrative".equalsIgnoreCase(submission.getAuditType())) {
+                    throw new IllegalArgumentException("Send back workflow is disabled.");
+                }
+                submission.setStatus("SENT_BACK");
+                ObjectMapper mapper = new ObjectMapper();
+                try {
+                    com.fasterxml.jackson.databind.node.ObjectNode valuesNode = objectNodeOrEmpty(mapper, submission.getValuesData());
+                    com.fasterxml.jackson.databind.node.ObjectNode progress = mapper.createObjectNode();
+                    ADMIN_POSTS.forEach(post -> progress.put(post, "DRAFT"));
+                    valuesNode.set("administrativeProgress", progress);
+                    submission.setValuesData(mapper.writeValueAsString(valuesNode));
+                } catch (Exception ignored) {}
+                submission.setSubmittedByDetails(null);
+                submission.setSubmittedAt(null);
             }
             if (upperStatus.equals("AUDITOR_COMPLETED")) {
                 if (!isAssignedAuditor && !isIqac) {
