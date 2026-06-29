@@ -2,7 +2,7 @@ steps:
   # Pull :latest for layer cache (fail-safe — ignore if image doesn't exist yet)
   - name: gcr.io/cloud-builders/docker
     id: pull-cache
-    entrypoint: bash
+    entrypoint: sh
     args:
       - -c
       - docker pull $_IMAGE:latest || true
@@ -35,7 +35,7 @@ steps:
     args:
       - run
       - deploy
-      - director-appraisal-backend
+      - schoolappraisal-backend
       - --image=$_IMAGE:latest
       - --region=asia-south1
       - --platform=managed
@@ -56,9 +56,9 @@ steps:
 
 substitutions:
   # Customize these default substitutions when triggering builds
-  _IMAGE: asia-south1-docker.pkg.dev/director-appraisal/director-appraisal-repo/backend
-  _SQL_INSTANCE: director-appraisal-project:asia-south1:director-appraisal-db
-  _BUCKET_NAME: director-appraisal-attachments
+  _IMAGE: asia-south1-docker.pkg.dev/facultyappraisal-500016/schoolappraisal-backend/backend
+  _SQL_INSTANCE: facultyappraisal-500016:asia-south1:schoolappraisal-db
+  _BUCKET_NAME: schoolappraisal-attachments
   _EMAIL_USERNAME: your-email@gmail.com
   _FRONTEND_URL: http://localhost:5173
 

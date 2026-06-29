@@ -155,9 +155,9 @@ public class SubmissionService {
                     "tablesData"
             );
 
-            progress = administrativeProgressNode(mapper, mergedValues);
-            progress.put(callerPost, approving ? "APPROVED" : "IN_PROGRESS");
-            mergedValues.set("administrativeProgress", progress);
+            com.fasterxml.jackson.databind.node.ObjectNode mergedProgress = administrativeProgressNode(mapper, mergedValues);
+            mergedProgress.put(callerPost, approving ? "APPROVED" : "IN_PROGRESS");
+            mergedValues.set("administrativeProgress", mergedProgress);
             if (approving) {
                 addAdministrativeApproval(mapper, mergedValues, callerPost, caller);
             }
@@ -168,7 +168,7 @@ public class SubmissionService {
             submission.setAttachments(preparedAttachments);
 
             boolean allApproved = ADMIN_POSTS.stream()
-                    .allMatch(post -> "APPROVED".equalsIgnoreCase(progress.path(post).asText("DRAFT")));
+                    .allMatch(post -> "APPROVED".equalsIgnoreCase(mergedProgress.path(post).asText("DRAFT")));
             if (allApproved) {
                 submission.setStatus("SUBMITTED");
                 submission.setSubmittedAt(LocalDateTime.now());
