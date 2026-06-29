@@ -1496,6 +1496,22 @@ public class SubmissionService {
         return (com.fasterxml.jackson.databind.node.ObjectNode) node.deepCopy();
     }
 
+    private boolean isEffectivelyEmpty(com.fasterxml.jackson.databind.JsonNode node) {
+        if (node == null || node.isNull()) {
+            return true;
+        }
+        if (node.isTextual() && node.asText().trim().isEmpty()) {
+            return true;
+        }
+        if (node.isObject() && node.size() == 0) {
+            return true;
+        }
+        if (node.isArray() && node.size() == 0) {
+            return true;
+        }
+        return false;
+    }
+
     private com.fasterxml.jackson.databind.node.ObjectNode mergeAdministrativeJson(ObjectMapper mapper, String existingJson,
                                                                                   String incomingJson,
                                                                                   java.util.function.Function<String, String> sectionClassifier,
@@ -1519,9 +1535,7 @@ public class SubmissionService {
             if (existingValue != null && existingValue.equals(entry.getValue())) {
                 return;
             }
-            if (existingValue == null && (entry.getValue() == null || entry.getValue().isNull()
-                    || (entry.getValue().isObject() && entry.getValue().size() == 0)
-                    || (entry.getValue().isArray() && entry.getValue().size() == 0))) {
+            if (isEffectivelyEmpty(existingValue) && isEffectivelyEmpty(entry.getValue())) {
                 return;
             }
             throw new SecurityException("Unauthorized " + payloadName + " modification for section " + section);
