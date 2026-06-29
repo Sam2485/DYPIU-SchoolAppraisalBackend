@@ -1538,7 +1538,8 @@ public class SubmissionService {
             if (isEffectivelyEmpty(existingValue) && isEffectivelyEmpty(entry.getValue())) {
                 return;
             }
-            throw new SecurityException("Unauthorized " + payloadName + " modification for section " + section);
+            throw new SecurityException("Unauthorized " + payloadName + " modification for section " + section
+                    + " (key: '" + entry.getKey() + "', existing: " + existingValue + ", incoming: " + entry.getValue() + ")");
         });
         return merged;
     }
