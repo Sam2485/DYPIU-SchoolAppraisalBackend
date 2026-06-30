@@ -1600,6 +1600,22 @@ public class SubmissionService {
 
     private String classifyAdministrativeTableSection(String key) {
         String normalized = normalizeJsonKey(key);
+        if (List.of(
+                "hackathons",
+                "culturalactivities",
+                "sportsactivities",
+                "communityactivities",
+                "adminstudentawards",
+                "awardsprizesrecognitions"
+        ).contains(normalized)) {
+            return "D";
+        }
+        if (List.of(
+                "trainingactivities",
+                "industrycollaborations"
+        ).contains(normalized) || normalized.contains("placement")) {
+            return "E";
+        }
         if (normalized.contains("faculty") || normalized.contains("staff")) {
             return "B";
         }
@@ -1607,15 +1623,6 @@ public class SubmissionService {
                 || normalized.contains("eresource") || normalized.contains("it") || normalized.contains("sportsfacilities")
                 || normalized.contains("divyangajan") || normalized.contains("researchresource")) {
             return "C";
-        }
-        if (normalized.contains("hackathon") || normalized.contains("cultural") || normalized.contains("sportsactivities")
-                || normalized.contains("community") || normalized.contains("adminstudentawards")
-                || normalized.contains("awardsprizesrecognitions")) {
-            return "D";
-        }
-        if (normalized.contains("trainingactivities") || normalized.contains("industrycollaborations")
-                || normalized.contains("placement")) {
-            return "E";
         }
         return "A";
     }
@@ -1630,8 +1637,8 @@ public class SubmissionService {
             return "C";
         }
         if (normalized.contains("partd") || normalized.contains("hackathon") || normalized.contains("cultural")
-                || normalized.contains("sports") || normalized.contains("community") || normalized.contains("award")
-                || normalized.contains("recognition")) {
+                || normalized.contains("sports") || normalized.contains("community")
+                || normalized.contains("adminstudentawards") || normalized.contains("awardsprizesrecognitions")) {
             return "D";
         }
         if (normalized.contains("parte") || normalized.contains("placement") || normalized.contains("parteschools")

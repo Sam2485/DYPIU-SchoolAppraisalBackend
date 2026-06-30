@@ -664,6 +664,79 @@ class SubmissionServiceTest {
     }
 
     @Test
+    void sharedAdministrativeDeanStudentWelfareCanMergeOnlySectionDAdminTables() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{\"scholarshipSummary\":[{\"srNo\":\"existing\"}]}")
+                .attachments("[]")
+                .build();
+        User dsw = User.builder()
+                .email("dsw@dypiu.ac.in")
+                .role("administrative")
+                .post("dean-student-welfare")
+                .build();
+
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Submission updated = submissionService.updateSharedAdministrativeContribution(
+                500L,
+                dsw,
+                null,
+                "dean-student-welfare",
+                List.of("D"),
+                "{}",
+                "{\"hackathons\":[{\"srNo\":\"1\"}],\"culturalActivities\":[{\"srNo\":\"2\"}],\"sportsActivities\":[{\"srNo\":\"3\"}],\"communityActivities\":[{\"srNo\":\"4\"}],\"adminStudentAwards\":[{\"srNo\":\"5\"}]}",
+                "[]"
+        );
+
+        assertTrue(updated.getTablesData().contains("hackathons"));
+        assertTrue(updated.getTablesData().contains("culturalActivities"));
+        assertTrue(updated.getTablesData().contains("sportsActivities"));
+        assertTrue(updated.getTablesData().contains("communityActivities"));
+        assertTrue(updated.getTablesData().contains("adminStudentAwards"));
+        assertTrue(updated.getTablesData().contains("scholarshipSummary"));
+        assertFalse(updated.getTablesData().contains("studentAwards"));
+        assertTrue(updated.getValuesData().contains("\"dean-student-welfare\":\"IN_PROGRESS\""));
+    }
+
+    @Test
+    void sharedAdministrativeDeanStudentWelfareCannotMergeAcademicStudentAwardsTable() {
+        Submission shared = Submission.builder()
+                .id(500L)
+                .email("administrative.shared@dypiu.ac.in")
+                .auditType("administrative")
+                .status("DRAFT")
+                .valuesData("{\"administrativeProgress\":{\"registrar\":\"DRAFT\",\"hr\":\"DRAFT\",\"dean-student-welfare\":\"DRAFT\",\"dean-placement\":\"DRAFT\"}}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User dsw = User.builder()
+                .email("dsw@dypiu.ac.in")
+                .role("administrative")
+                .post("dean-student-welfare")
+                .build();
+
+        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
+
+        assertThrows(SecurityException.class, () -> submissionService.updateSharedAdministrativeContribution(
+                500L,
+                dsw,
+                null,
+                "dean-student-welfare",
+                List.of("D"),
+                "{}",
+                "{\"studentAwards\":[{\"srNo\":\"legacy-academic\"}]}",
+                "[]"
+        ));
+        verify(submissionRepository, never()).save(any(Submission.class));
+    }
+
+    @Test
     void sharedAdministrativeApprovalMarksOnlyContributorApproved() {
         Submission shared = Submission.builder()
                 .id(500L)
