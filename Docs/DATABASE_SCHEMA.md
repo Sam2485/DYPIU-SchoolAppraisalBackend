@@ -36,6 +36,7 @@ Holds the master state of academic and administrative audit form submissions.
 - `values_data` (TEXT): JSON payload storing all custom form fields.
 - `tables_data` (TEXT): JSON payload storing custom table structures.
 - `attachments` (TEXT): JSON payload list of attachments.
+- `submitted_by_details` (TEXT): JSON payload tracking submission status, timestamp, name, and email details for each administrative role.
 - `version` (INT, DEFAULT 1): Incremental version number for locking.
 
 ### snapshots
@@ -147,6 +148,7 @@ Migrations are baseline managed inside the directory `src/main/resources/db/migr
 - **V7__add_attachment_school_group_and_auditor_posts.sql**: Adds `school_group`, `administrative_post`, and JSON columns for multi-auditor routing.
 - **V8__add_administrative_attachment_columns.sql**: Adds section-specific attachment tracking columns.
 - **V9__add_indexes.sql**: Configures performance-optimizing database indexes on highly queried fields to avoid full-table scans.
+- **V10__add_submitted_by_details.sql**: Adds the `submitted_by_details` text column to track granular contributor submissions in shared administrative audits.
 
 ---
 

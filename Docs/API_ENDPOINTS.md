@@ -421,6 +421,53 @@ Section ownership:
 - Dean Student Welfare: Part D
 - Dean Placement: Part E
 
+### Get Shared Administrative Form Status
+- **URL**: `/administrative/{cycleId}/status`
+- **Method**: `GET`
+- **Headers**: `Authorization: Bearer <jwt-token>`
+- **Response (200 OK)**:
+  ```json
+  {
+    "id": 500,
+    "email": "administrative.shared@dypiu.ac.in",
+    "auditType": "administrative",
+    "status": "DRAFT",
+    "submittedBy": {
+      "registrar": {
+        "submitted": true,
+        "submittedAt": "2026-06-29T18:10:08",
+        "name": "Registrar User",
+        "email": "registrar@dypiu.ac.in"
+      },
+      "hr": {
+        "submitted": false,
+        "submittedAt": null,
+        "name": null,
+        "email": null
+      },
+      "deanStudentWelfare": {
+        "submitted": false,
+        "submittedAt": null,
+        "name": null,
+        "email": null
+      },
+      "deanPlacement": {
+        "submitted": false,
+        "submittedAt": null,
+        "name": null,
+        "email": null
+      }
+    }
+  }
+  ```
+
+### Submit Administrative Role Section
+- **URL**: `/administrative/{cycleId}/submit`
+- **Method**: `POST`
+- **Headers**: `Authorization: Bearer <jwt-token>`
+- **Response (200 OK)**:
+  - Returns the updated `Submission` entity. If all four roles have successfully submitted, the overall submission status transitions automatically to `SUBMITTED`.
+
 ZIP download for all administrative contributors:
 
 ```http
