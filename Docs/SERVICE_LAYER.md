@@ -14,10 +14,7 @@ Integrates with Spring Security's `UserDetailsService` and handles user authenti
 - `findAllUsers()`: Retrieves a list of all user profiles registered in the system.
 - `createUser(User user)`: Checks for email conflicts, encodes the raw password using BCrypt hashing, and persists the new user.
 - `updateUser(User user, String rawPassword)`: Saves changes to name, email, role, school, and designation. If a non-blank `rawPassword` is supplied, it re-hashes and updates the user's password.
-- `deleteUser(User user)`: Completely deletes the user profile and all associated data:
-  1. Calls `SubmissionService.removeAdministrativeUserContribution` to clear their sections' data (values, tables, progress, approvals, and physical files) from shared administrative cycle forms.
-  2. Calls `SubmissionService.deleteUserSubmissionsAndAttachments` to remove all their academic/owned submissions and physically delete all referenced file attachments from cloud/local storage.
-  3. Clears reset tokens, auditor assignments, administrative posts, and finally deletes the user record.
+- `deleteUser(User user)`: Removes the user profile from the database.
 - `checkPassword(String rawPassword, String encodedPassword)`: Compares raw login inputs against BCrypt-encrypted database passwords.
 - `createPasswordResetToken(String email)`: Performs password reset token generation:
   1. Locates the user or throws an exception.

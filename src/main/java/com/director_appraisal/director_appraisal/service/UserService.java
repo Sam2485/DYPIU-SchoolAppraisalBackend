@@ -1,13 +1,8 @@
 package com.director_appraisal.director_appraisal.service;
 
 import com.director_appraisal.director_appraisal.model.PasswordResetToken;
-import com.director_appraisal.director_appraisal.model.Submission;
 import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.repository.PasswordResetTokenRepository;
-import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
-import com.director_appraisal.director_appraisal.repository.SubmissionAuditorAssignmentRepository;
-import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
-import com.director_appraisal.director_appraisal.repository.UserAdministrativePostRepository;
 import com.director_appraisal.director_appraisal.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -30,32 +25,17 @@ public class UserService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository resetTokenRepository;
-    private final SubmissionRepository submissionRepository;
-    private final SnapshotRepository snapshotRepository;
-    private final SubmissionAuditorAssignmentRepository auditorAssignmentRepository;
-    private final UserAdministrativePostRepository userAdministrativePostRepository;
-    private final SubmissionService submissionService;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final String frontendUrl;
 
     public UserService(UserRepository userRepository, 
                        PasswordResetTokenRepository resetTokenRepository,
-                       SubmissionRepository submissionRepository,
-                       SnapshotRepository snapshotRepository,
-                       SubmissionAuditorAssignmentRepository auditorAssignmentRepository,
-                       UserAdministrativePostRepository userAdministrativePostRepository,
-                       @Lazy SubmissionService submissionService,
                        @Lazy PasswordEncoder passwordEncoder,
                        EmailService emailService,
                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
-        this.submissionRepository = submissionRepository;
-        this.snapshotRepository = snapshotRepository;
-        this.auditorAssignmentRepository = auditorAssignmentRepository;
-        this.userAdministrativePostRepository = userAdministrativePostRepository;
-        this.submissionService = submissionService;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.frontendUrl = frontendUrl;
@@ -90,23 +70,6 @@ public class UserService implements UserDetailsService {
 
     @Transactional
     public void deleteUser(User user) {
-        if (user == null) {
-            return;
-        }
-        
-        // Remove administrative contributions
-        submissionService.removeAdministrativeUserContribution(user);
-
-        // Delete academic/owned submissions and their associated attachments
-        submissionService.deleteUserSubmissionsAndAttachments(user);
-
-        if (user.getId() != null) {
-            auditorAssignmentRepository.deleteByAuditorId(user.getId());
-            userAdministrativePostRepository.deleteByUserId(user.getId());
-        }
-        if (user.getEmail() != null && !user.getEmail().isBlank()) {
-            resetTokenRepository.deleteByEmail(user.getEmail().trim().toLowerCase());
-        }
         userRepository.delete(user);
     }
 

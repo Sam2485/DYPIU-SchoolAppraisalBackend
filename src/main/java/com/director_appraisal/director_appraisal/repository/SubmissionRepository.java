@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SubmissionRepository extends JpaRepository<Submission, Long> {
-    List<Submission> findAllByEmailIgnoreCase(String email);
     Optional<Submission> findByEmailAndAuditType(String email, String auditType);
     Optional<Submission> findFirstByEmailAndAuditTypeAndStatusInOrderByIdDesc(String email, String auditType, List<String> statuses);
     Optional<Submission> findFirstByEmailAndAuditTypeOrderByIdDesc(String email, String auditType);

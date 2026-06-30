@@ -5,7 +5,6 @@ import com.director_appraisal.director_appraisal.model.Snapshot;
 import com.director_appraisal.director_appraisal.model.Submission;
 import com.director_appraisal.director_appraisal.model.SubmissionAuditorAssignment;
 import com.director_appraisal.director_appraisal.model.User;
-import com.director_appraisal.director_appraisal.model.UserAdministrativePost;
 import com.director_appraisal.director_appraisal.repository.SnapshotRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionAuditorAssignmentRepository;
 import com.director_appraisal.director_appraisal.repository.SubmissionRepository;
@@ -222,109 +221,6 @@ public class SubmissionService {
                                                             String tablesData, String attachments) {
         return mergeSharedAdministrativeContribution(id, caller, action, contributorPost, sections, valuesData, tablesData, attachments);
     }
-
-    @Transactional
-    public void removeAdministrativeUserContribution(User user) {
-        if (user == null || !"administrative".equalsIgnoreCase(user.getRole())) {
-            return;
-        }
-
-        java.util.Set<String> posts = resolveAdministrativePosts(user);
-        if (posts.isEmpty()) {
-            return;
-        }
-
-        java.util.Set<String> sections = new java.util.LinkedHashSet<>();
-        posts.forEach(post -> sections.addAll(ownedAdministrativeSections(post)));
-
-        List<Submission> sharedForms = submissionRepository.findAllByEmailIgnoreCase(SHARED_ADMINISTRATIVE_EMAIL).stream()
-                .filter(submission -> "administrative".equalsIgnoreCase(submission.getAuditType()))
-                .toList();
-
-        ObjectMapper mapper = new ObjectMapper();
-        for (Submission sharedForm : sharedForms) {
-            Submission locked = submissionRepository.findByIdForUpdate(sharedForm.getId()).orElse(sharedForm);
-            try {
-                com.fasterxml.jackson.databind.node.ObjectNode values = objectNodeOrEmpty(mapper, locked.getValuesData());
-                com.fasterxml.jackson.databind.node.ObjectNode tables = objectNodeOrEmpty(mapper, locked.getTablesData());
-
-                removeAdministrativeOwnedFields(values, this::classifyAdministrativeValueSection, sections);
-                removeAdministrativeOwnedFields(tables, this::classifyAdministrativeTableSection, sections);
-                resetAdministrativeProgress(values, posts);
-                removeAdministrativeApprovals(values, posts);
-                locked.setSubmittedByDetails(removeAdministrativeSubmittedByDetails(mapper, locked.getSubmittedByDetails(), posts));
-
-                locked.setValuesData(mapper.writeValueAsString(values));
-                locked.setTablesData(mapper.writeValueAsString(tables));
-                locked.setAttachments(removeAdministrativeOwnedAttachments(mapper, locked.getAttachments(), sections));
-
-                boolean allSubmitted = ADMIN_POSTS.stream()
-                        .allMatch(requiredPost -> {
-                            String status = values.path("administrativeProgress").path(requiredPost).asText("DRAFT");
-                            return "SUBMITTED".equalsIgnoreCase(status) || "APPROVED".equalsIgnoreCase(status);
-                        });
-                if (!allSubmitted && !"DRAFT".equalsIgnoreCase(locked.getStatus())) {
-                    locked.setStatus("DRAFT");
-                    locked.setSubmittedAt(null);
-                }
-
-                submissionRepository.save(locked);
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to remove administrative user contribution", e);
-            }
-        }
-    }
-
-    @Transactional
-    public void deleteUserSubmissionsAndAttachments(User user) {
-        if (user == null) {
-            return;
-        }
-        String email = user.getEmail();
-        if (email == null || email.isBlank()) {
-            return;
-        }
-
-        List<Submission> submissions = submissionRepository.findAllByEmailIgnoreCase(email.trim());
-        for (Submission submission : submissions) {
-            if (submission.getId() == null) {
-                continue;
-            }
-            // Delete physical files
-            if (submission.getAttachments() != null && !submission.getAttachments().isBlank()) {
-                try {
-                    ObjectMapper mapper = new ObjectMapper();
-                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(submission.getAttachments());
-                    if (root.isArray()) {
-                        root.forEach(item -> {
-                            String url = textField(item, "url", "fileUrl", "downloadUrl");
-                            if (url != null) {
-                                try {
-                                    attachmentService.deleteFile(url);
-                                } catch (Exception ignored) {}
-                            }
-                        });
-                    }
-                } catch (Exception ignored) {}
-            }
-            
-            // Delete table attachments
-            try {
-                java.util.Set<String> urls = new java.util.HashSet<>();
-                collectAttachmentUrls(submission.getTablesData(), urls);
-                for (String url : urls) {
-                    try {
-                        attachmentService.deleteFile(url);
-                    } catch (Exception ignored) {}
-                }
-            } catch (Exception ignored) {}
-
-            snapshotRepository.deleteBySubmissionId(submission.getId());
-            auditorAssignmentRepository.deleteBySubmissionId(submission.getId());
-            submissionRepository.delete(submission);
-        }
-    }
-
 
     private Submission mergeSharedAdministrativeContribution(Long id, User caller, String action, String contributorPost,
                                                             List<String> sections, String valuesData,
@@ -1693,131 +1589,17 @@ public class SubmissionService {
     }
 
     private java.util.Set<String> ownedAdministrativeSections(String post) {
-        if (post == null) {
-            return java.util.Collections.emptySet();
-        }
         return switch (post) {
             case "registrar" -> java.util.Set.of("A", "C");
             case "hr" -> java.util.Set.of("B");
             case "dean-student-welfare" -> java.util.Set.of("D");
             case "dean-placement" -> java.util.Set.of("E");
-            default -> java.util.Collections.emptySet();
+            default -> throw new SecurityException("Invalid administrative post");
         };
-    }
-
-    private java.util.Set<String> resolveAdministrativePosts(User user) {
-        java.util.Set<String> posts = new java.util.LinkedHashSet<>();
-        String primaryPost = canonicalAdministrativePost(user.getPost());
-        if (primaryPost != null) {
-            posts.add(primaryPost);
-        }
-        if (user.getId() != null) {
-            userAdministrativePostRepository.findByUserId(user.getId()).stream()
-                    .map(UserAdministrativePost::getPost)
-                    .map(this::canonicalAdministrativePost)
-                    .filter(post -> post != null && !post.isBlank())
-                    .forEach(posts::add);
-        }
-        return posts;
-    }
-
-    private void removeAdministrativeOwnedFields(com.fasterxml.jackson.databind.node.ObjectNode node,
-                                                 java.util.function.Function<String, String> sectionClassifier,
-                                                 java.util.Set<String> sections) {
-        List<String> removeKeys = new java.util.ArrayList<>();
-        node.fields().forEachRemaining(entry -> {
-            if ("administrativeProgress".equals(entry.getKey()) || "administrativeApprovals".equals(entry.getKey())) {
-                return;
-            }
-            if (sections.contains(sectionClassifier.apply(entry.getKey()))) {
-                removeKeys.add(entry.getKey());
-            }
-        });
-        removeKeys.forEach(node::remove);
-    }
-
-    private void resetAdministrativeProgress(com.fasterxml.jackson.databind.node.ObjectNode values, java.util.Set<String> posts) {
-        ObjectMapper mapper = new ObjectMapper();
-        com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, values);
-        posts.forEach(post -> progress.put(post, "DRAFT"));
-        values.set("administrativeProgress", progress);
-    }
-
-    private void removeAdministrativeApprovals(com.fasterxml.jackson.databind.node.ObjectNode values, java.util.Set<String> posts) {
-        com.fasterxml.jackson.databind.JsonNode approvalsNode = values.get("administrativeApprovals");
-        if (approvalsNode == null || !approvalsNode.isObject()) {
-            return;
-        }
-        com.fasterxml.jackson.databind.node.ObjectNode approvals = (com.fasterxml.jackson.databind.node.ObjectNode) approvalsNode;
-        posts.forEach(approvals::remove);
-    }
-
-    private String removeAdministrativeSubmittedByDetails(ObjectMapper mapper, String submittedByDetails,
-                                                         java.util.Set<String> posts) throws java.io.IOException {
-        com.fasterxml.jackson.databind.node.ObjectNode details = objectNodeOrEmpty(mapper, submittedByDetails);
-        for (String post : posts) {
-            String key = toCamelCaseRole(post);
-            com.fasterxml.jackson.databind.node.ObjectNode emptyInfo = mapper.createObjectNode();
-            emptyInfo.put("submitted", false);
-            emptyInfo.putNull("submittedAt");
-            emptyInfo.putNull("name");
-            emptyInfo.putNull("email");
-            details.set(key, emptyInfo);
-        }
-        return mapper.writeValueAsString(details);
-    }
-
-    private String removeAdministrativeOwnedAttachments(ObjectMapper mapper, String attachmentsJson,
-                                                        java.util.Set<String> sections) {
-        if (attachmentsJson == null || attachmentsJson.isBlank()) {
-            return attachmentsJson;
-        }
-        try {
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(attachmentsJson);
-            if (!root.isArray()) {
-                return attachmentsJson;
-            }
-            com.fasterxml.jackson.databind.node.ArrayNode retained = mapper.createArrayNode();
-            root.forEach(item -> {
-                if (attachmentBelongsToAdministrativeSections(item, sections)) {
-                    String url = textField(item, "url", "fileUrl", "downloadUrl");
-                    if (url != null) {
-                        try {
-                            attachmentService.deleteFile(url);
-                        } catch (Exception e) {
-                            System.err.println("Failed to delete attachment: " + url);
-                        }
-                    }
-                } else {
-                    retained.add(item);
-                }
-            });
-            return mapper.writeValueAsString(retained);
-        } catch (Exception e) {
-            return attachmentsJson;
-        }
-    }
-
-    private boolean attachmentBelongsToAdministrativeSections(com.fasterxml.jackson.databind.JsonNode node,
-                                                             java.util.Set<String> sections) {
-        if (node == null || !node.isObject()) {
-            return false;
-        }
-        String tableId = textField(node, "tableId", "tableName", "table");
-        if (tableId != null && sections.contains(classifyAdministrativeTableSection(tableId))) {
-            return true;
-        }
-        String sectionId = textField(node, "sectionId", "section", "part");
-        return sectionId != null && sections.contains(classifyAdministrativeValueSection(sectionId));
     }
 
     private String classifyAdministrativeTableSection(String key) {
         String normalized = normalizeJsonKey(key);
-        if ("a".equals(normalized)) return "A";
-        if ("b".equals(normalized)) return "B";
-        if ("c".equals(normalized)) return "C";
-        if ("d".equals(normalized)) return "D";
-        if ("e".equals(normalized)) return "E";
         if (List.of(
                 "hackathons",
                 "culturalactivities",
@@ -1847,11 +1629,6 @@ public class SubmissionService {
 
     private String classifyAdministrativeValueSection(String key) {
         String normalized = normalizeJsonKey(key);
-        if ("a".equals(normalized)) return "A";
-        if ("b".equals(normalized)) return "B";
-        if ("c".equals(normalized)) return "C";
-        if ("d".equals(normalized)) return "D";
-        if ("e".equals(normalized)) return "E";
         if (normalized.contains("partb") || normalized.contains("hr") || normalized.contains("faculty") || normalized.contains("staff")) {
             return "B";
         }

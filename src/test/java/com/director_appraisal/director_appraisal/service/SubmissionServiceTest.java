@@ -23,7 +23,6 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -851,71 +850,5 @@ class SubmissionServiceTest {
                 "{}",
                 "[]"
         ));
-    }
-
-    @Test
-    void testDeleteUserOwnedSubmissionsAndAttachmentsCleanUp() throws Exception {
-        User user = User.builder().email("director@dypiu.ac.in").build();
-        Submission submission = Submission.builder()
-                .id(101L)
-                .email("director@dypiu.ac.in")
-                .attachments("[{\"url\":\"/uploads/test.pdf\"}]")
-                .tablesData("{\"someTable\":[{\"url\":\"/uploads/table.pdf\"}]}")
-                .build();
-
-        when(submissionRepository.findAllByEmailIgnoreCase("director@dypiu.ac.in"))
-                .thenReturn(List.of(submission));
-
-        submissionService.deleteUserSubmissionsAndAttachments(user);
-
-        verify(attachmentService).deleteFile("/uploads/test.pdf");
-        verify(attachmentService).deleteFile("/uploads/table.pdf");
-        verify(snapshotRepository).deleteBySubmissionId(101L);
-        verify(auditorAssignmentRepository).deleteBySubmissionId(101L);
-        verify(submissionRepository).delete(submission);
-    }
-
-    @Test
-    void testRemoveAdministrativeUserContribution() throws Exception {
-        User hr = User.builder()
-                .id(42L)
-                .email("hr@dypiu.ac.in")
-                .role("administrative")
-                .post("hr")
-                .build();
-
-        Submission shared = Submission.builder()
-                .id(500L)
-                .email("administrative.shared@dypiu.ac.in")
-                .auditType("administrative")
-                .status("SUBMITTED")
-                .valuesData("{\"somePartBField\":\"valueB\",\"somePartAField\":\"valueA\",\"administrativeProgress\":{\"hr\":\"SUBMITTED\",\"registrar\":\"SUBMITTED\"}}")
-                .tablesData("{\"facultyTable\":[{\"url\":\"/uploads/b.pdf\"}],\"registrarTable\":[{\"url\":\"/uploads/a.pdf\"}]}")
-                .attachments("[{\"url\":\"/uploads/b.pdf\",\"sectionId\":\"B\"},{\"url\":\"/uploads/a.pdf\",\"sectionId\":\"A\"}]")
-                .submittedByDetails("{\"hr\":{\"submitted\":true,\"name\":\"HR User\"},\"registrar\":{\"submitted\":true,\"name\":\"Registrar User\"}}")
-                .build();
-
-        when(submissionRepository.findAllByEmailIgnoreCase("administrative.shared@dypiu.ac.in"))
-                .thenReturn(List.of(shared));
-        when(submissionRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(shared));
-
-        submissionService.removeAdministrativeUserContribution(hr);
-
-        verify(attachmentService).deleteFile("/uploads/b.pdf");
-        verify(attachmentService, never()).deleteFile("/uploads/a.pdf");
-
-        // Verify Part B data was removed from values, tables, progress, attachments and details
-        assertFalse(shared.getValuesData().contains("somePartBField"));
-        assertTrue(shared.getValuesData().contains("somePartAField"));
-        assertFalse(shared.getTablesData().contains("facultyTable"));
-        assertTrue(shared.getTablesData().contains("registrarTable"));
-        
-        // Progress for HR reset to DRAFT
-        assertTrue(shared.getValuesData().contains("\"hr\":\"DRAFT\""));
-        // Details for HR reset to empty/submitted=false
-        assertTrue(shared.getSubmittedByDetails().contains("\"hr\":{\"submitted\":false"));
-        // Status becomes DRAFT because all are no longer submitted
-        assertEquals("DRAFT", shared.getStatus());
-        assertNull(shared.getSubmittedAt());
     }
 }
