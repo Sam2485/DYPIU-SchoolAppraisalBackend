@@ -562,4 +562,151 @@ public class SubmissionIntegrationTest {
             submissionController.reviewSubmission(subId, req);
         });
     }
+
+    @Test
+    void testAdministrativeSaveLoadAndSubmitPartEWithB2B3B4Data() throws Exception {
+        User placement = User.builder()
+                .email("placement@dypiu.ac.in")
+                .name("Dean Placement")
+                .role("administrative")
+                .post("dean-placement")
+                .accountType("user")
+                .status("active")
+                .password("password")
+                .build();
+        userRepository.save(placement);
+
+        authenticateAs(placement);
+
+        String partEJson = "{\"partESchools\":[{"
+                + "\"schoolCode\":\"SOCSEA\",\"schoolName\":\"School of Computer Science\","
+                + "\"placementPrograms\":[],"
+                + "\"activities\":[{"
+                + "  \"Sr No\":\"1\",\"Activity\":\"Internship\","
+                + "  \"All Students List Attachment\":[{\"name\":\"list.pdf\",\"url\":\"/uploads/list.pdf\"}],"
+                + "  \"Certificates Attachment\":[{\"name\":\"certs.pdf\",\"url\":\"/uploads/certs.pdf\"}]"
+                + "}],"
+                + "\"careerGuidanceActivities\":[{"
+                + "  \"Sr No\":\"1\",\"Title of the Session\":\"Guidance Session\","
+                + "  \"Link for Proofs\":[{\"name\":\"guidance.pdf\",\"url\":\"/uploads/guidance.pdf\"}]"
+                + "}],"
+                + "\"industryInteractionActivities\":[{"
+                + "  \"Sr No\":\"1\",\"Title of the Session\":\"Interaction Session\","
+                + "  \"Link for Proofs\":[{\"name\":\"interaction.pdf\",\"url\":\"/uploads/interaction.pdf\"}]"
+                + "}],"
+                + "\"otherActivities\":[{"
+                + "  \"Sr No\":\"1\",\"Title of the Session\":\"Other Session\","
+                + "  \"Link for Proofs\":[{\"name\":\"other.pdf\",\"url\":\"/uploads/other.pdf\"}]"
+                + "}]"
+                + "}]}";
+
+        SubmissionController.FormSubmissionRequest saveReq = new SubmissionController.FormSubmissionRequest();
+        saveReq.setAuditType("administrative");
+        saveReq.setSharedAdministrativeForm(true);
+        saveReq.setContributorPost("dean-placement");
+        saveReq.setSections(List.of("E"));
+        saveReq.setValuesData(partEJson);
+        saveReq.setTablesData("{}");
+        saveReq.setAttachments("[]");
+
+        // 1. Save draft
+        Submission draft = submissionController.saveDraft(saveReq).getBody();
+        assertNotNull(draft);
+        assertTrue(draft.getValuesData().contains("careerGuidanceActivities"));
+        assertTrue(draft.getValuesData().contains("industryInteractionActivities"));
+        assertTrue(draft.getValuesData().contains("otherActivities"));
+        assertTrue(draft.getValuesData().contains("guidance.pdf"));
+
+        // 2. Fetch/Load draft
+        Submission fetched = submissionController.getMyDraft("administrative", true).getBody();
+        assertNotNull(fetched);
+        assertTrue(fetched.getValuesData().contains("careerGuidanceActivities"));
+        assertTrue(fetched.getValuesData().contains("industryInteractionActivities"));
+        assertTrue(fetched.getValuesData().contains("otherActivities"));
+        assertTrue(fetched.getValuesData().contains("guidance.pdf"));
+
+        // 3. Submit
+        SubmissionController.FormSubmissionRequest submitReq = new SubmissionController.FormSubmissionRequest();
+        submitReq.setAuditType("administrative");
+        submitReq.setSharedAdministrativeForm(true);
+        submitReq.setContributorPost("dean-placement");
+        submitReq.setSections(List.of("E"));
+        submitReq.setValuesData(partEJson);
+        submitReq.setTablesData("{}");
+        submitReq.setAttachments("[]");
+
+        Submission submitted = submissionController.submitForm(submitReq).getBody();
+        assertNotNull(submitted);
+        assertTrue(submitted.getValuesData().contains("careerGuidanceActivities"));
+        assertTrue(submitted.getValuesData().contains("industryInteractionActivities"));
+        assertTrue(submitted.getValuesData().contains("otherActivities"));
+        assertTrue(submitted.getValuesData().contains("guidance.pdf"));
+    }
+
+    @Test
+    void testAttachmentExtractionIncludesLinkForProofs() throws Exception {
+        User placement = User.builder()
+                .email("placement@dypiu.ac.in")
+                .name("Dean Placement")
+                .role("administrative")
+                .post("dean-placement")
+                .accountType("user")
+                .status("active")
+                .password("password")
+                .build();
+        userRepository.save(placement);
+
+        authenticateAs(placement);
+
+        String partEJson = "{\"partESchools\":[{"
+                + "\"schoolCode\":\"SOCSEA\",\"schoolName\":\"School of Computer Science\","
+                + "\"careerGuidanceActivities\":[{"
+                + "  \"Sr No\":\"1\",\"Title of the Session\":\"Guidance Session\","
+                + "  \"Link for Proofs\":[{\"name\":\"guidance.pdf\",\"url\":\"/uploads/guidance.pdf\"}]"
+                + "}],"
+                + "\"industryInteractionActivities\":[{"
+                + "  \"Sr No\":\"1\",\"Title of the Session\":\"Interaction Session\","
+                + "  \"Link for Proofs\":[{\"name\":\"interaction.pdf\",\"url\":\"/uploads/interaction.pdf\"}]"
+                + "}],"
+                + "\"otherActivities\":[{"
+                + "  \"Sr No\":\"1\",\"Title of the Session\":\"Other Session\","
+                + "  \"Link for Proofs\":[{\"name\":\"other.pdf\",\"url\":\"/uploads/other.pdf\"}]"
+                + "}]"
+                + "}]}";
+
+        SubmissionController.FormSubmissionRequest saveReq = new SubmissionController.FormSubmissionRequest();
+        saveReq.setAuditType("administrative");
+        saveReq.setSharedAdministrativeForm(true);
+        saveReq.setContributorPost("dean-placement");
+        saveReq.setSections(List.of("E"));
+        saveReq.setValuesData(partEJson);
+        saveReq.setTablesData("{}");
+        saveReq.setAttachments("[]");
+
+        Submission submitted = submissionController.submitForm(saveReq).getBody();
+        assertNotNull(submitted);
+        submitted.setStatus("SUBMITTED");
+        submitted = submissionRepository.save(submitted);
+
+        // Authenticate as IQAC to download ZIP
+        authenticateAs(iqacUser);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        submissionController.downloadAttachments(submitted.getId(), true, response);
+
+        byte[] zipBytes = response.getContentAsByteArray();
+        assertTrue(zipBytes.length > 0);
+
+        java.util.Set<String> entryNames = new java.util.HashSet<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                entryNames.add(entry.getName());
+            }
+        }
+
+        assertTrue(entryNames.stream().anyMatch(name -> name.contains("guidance.pdf")));
+        assertTrue(entryNames.stream().anyMatch(name -> name.contains("interaction.pdf")));
+        assertTrue(entryNames.stream().anyMatch(name -> name.contains("other.pdf")));
+    }
 }

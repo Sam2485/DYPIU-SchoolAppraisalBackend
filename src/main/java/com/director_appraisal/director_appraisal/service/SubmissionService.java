@@ -1616,6 +1616,56 @@ public class SubmissionService {
         return false;
     }
 
+    private void mergePartESchools(ObjectMapper mapper, com.fasterxml.jackson.databind.node.ObjectNode merged, com.fasterxml.jackson.databind.JsonNode incomingPartESchools) {
+        com.fasterxml.jackson.databind.JsonNode existingNode = merged.get("partESchools");
+        if (existingNode == null || !existingNode.isArray()) {
+            merged.set("partESchools", incomingPartESchools);
+            return;
+        }
+        if (incomingPartESchools == null || !incomingPartESchools.isArray()) {
+            return;
+        }
+
+        com.fasterxml.jackson.databind.node.ArrayNode existingArray = (com.fasterxml.jackson.databind.node.ArrayNode) existingNode;
+        com.fasterxml.jackson.databind.node.ArrayNode incomingArray = (com.fasterxml.jackson.databind.node.ArrayNode) incomingPartESchools;
+
+        // Map existing schools by schoolCode
+        java.util.Map<String, com.fasterxml.jackson.databind.node.ObjectNode> existingMap = new java.util.LinkedHashMap<>();
+        for (com.fasterxml.jackson.databind.JsonNode schoolNode : existingArray) {
+            if (schoolNode.isObject()) {
+                String code = schoolNode.path("schoolCode").asText("").trim().toUpperCase();
+                if (!code.isEmpty()) {
+                    existingMap.put(code, (com.fasterxml.jackson.databind.node.ObjectNode) schoolNode);
+                }
+            }
+        }
+
+        com.fasterxml.jackson.databind.node.ArrayNode newArray = mapper.createArrayNode();
+
+        // Process incoming schools
+        for (com.fasterxml.jackson.databind.JsonNode incomingSchoolNode : incomingArray) {
+            if (incomingSchoolNode.isObject()) {
+                com.fasterxml.jackson.databind.node.ObjectNode incomingSchool = (com.fasterxml.jackson.databind.node.ObjectNode) incomingSchoolNode;
+                String code = incomingSchool.path("schoolCode").asText("").trim().toUpperCase();
+                if (!code.isEmpty() && existingMap.containsKey(code)) {
+                    // Merge incoming school keys into existing school to preserve older fields
+                    com.fasterxml.jackson.databind.node.ObjectNode existingSchool = existingMap.remove(code);
+                    incomingSchool.fields().forEachRemaining(field -> {
+                        existingSchool.set(field.getKey(), field.getValue());
+                    });
+                    newArray.add(existingSchool);
+                } else {
+                    newArray.add(incomingSchool);
+                }
+            }
+        }
+
+        // Add remaining existing schools that were not in incoming
+        existingMap.values().forEach(newArray::add);
+
+        merged.set("partESchools", newArray);
+    }
+
     private com.fasterxml.jackson.databind.node.ObjectNode mergeAdministrativeJson(ObjectMapper mapper, String existingJson,
                                                                                   String incomingJson,
                                                                                   java.util.function.Function<String, String> sectionClassifier,
@@ -1632,8 +1682,23 @@ public class SubmissionService {
             }
             String section = sectionClassifier.apply(entry.getKey());
             if (ownedSections.contains(section)) {
-                merged.set(entry.getKey(), entry.getValue());
+                if ("partESchools".equals(entry.getKey())) {
+                    mergePartESchools(mapper, merged, entry.getValue());
+                } else {
+                    merged.set(entry.getKey(), entry.getValue());
+                }
                 return;
+            }
+            if ("partESchools".equals(entry.getKey())) {
+                com.fasterxml.jackson.databind.JsonNode existingValue = merged.get(entry.getKey());
+                if (existingValue != null && existingValue.equals(entry.getValue())) {
+                    return;
+                }
+                if (isEffectivelyEmpty(existingValue) && isEffectivelyEmpty(entry.getValue())) {
+                    return;
+                }
+                throw new SecurityException("Unauthorized " + payloadName + " modification for section " + section
+                        + " (key: '" + entry.getKey() + "', existing: " + existingValue + ", incoming: " + entry.getValue() + ")");
             }
             com.fasterxml.jackson.databind.JsonNode existingValue = merged.get(entry.getKey());
             if (existingValue != null && existingValue.equals(entry.getValue())) {
