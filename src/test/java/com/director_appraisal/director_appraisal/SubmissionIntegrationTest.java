@@ -926,4 +926,76 @@ public class SubmissionIntegrationTest {
         assertTrue(entryNames.stream().anyMatch(name -> name.contains("bog-mom.pdf")));
         assertTrue(entryNames.stream().anyMatch(name -> name.contains("training-report.pdf")));
     }
+
+    @Test
+    void testAdministrativeSubmissionStatusMergingAndRoleSaves() throws Exception {
+        User registrar = User.builder()
+                .email("registrar.test@dypiu.ac.in")
+                .name("Registrar Test")
+                .role("administrative")
+                .post("registrar")
+                .accountType("user")
+                .status("active")
+                .password("password")
+                .build();
+        userRepository.save(registrar);
+
+        User hr = User.builder()
+                .email("hr.test@dypiu.ac.in")
+                .name("HR Test")
+                .role("administrative")
+                .post("hr")
+                .accountType("user")
+                .status("active")
+                .password("password")
+                .build();
+        userRepository.save(hr);
+
+        submissionRepository.deleteAll();
+
+        // 1. Registrar saves Section A with status
+        authenticateAs(registrar);
+        String regValues = "{"
+                + "\"__administrativeSubmissionStatus\":{"
+                + "  \"registrar\":{\"submitted\":true,\"name\":\"Registrar User\"}"
+                + "}"
+                + "}";
+        SubmissionController.FormSubmissionRequest saveReq1 = new SubmissionController.FormSubmissionRequest();
+        saveReq1.setAuditType("administrative");
+        saveReq1.setSharedAdministrativeForm(true);
+        saveReq1.setContributorPost("registrar");
+        saveReq1.setSections(List.of("A"));
+        saveReq1.setValuesData(regValues);
+        saveReq1.setTablesData("{}");
+        saveReq1.setAttachments("[]");
+
+        Submission sub1 = submissionController.saveDraft(saveReq1).getBody();
+        assertNotNull(sub1);
+        assertTrue(sub1.getValuesData().contains("\"registrar\":{"));
+        assertFalse(sub1.getValuesData().contains("\"hr\":{"));
+
+        // 2. HR saves Section B with status
+        authenticateAs(hr);
+        String hrValues = "{"
+                + "\"__administrativeSubmissionStatus\":{"
+                + "  \"hr\":{\"submitted\":true,\"name\":\"HR User\"}"
+                + "}"
+                + "}";
+        SubmissionController.FormSubmissionRequest saveReq2 = new SubmissionController.FormSubmissionRequest();
+        saveReq2.setAuditType("administrative");
+        saveReq2.setSharedAdministrativeForm(true);
+        saveReq2.setContributorPost("hr");
+        saveReq2.setSections(List.of("B"));
+        saveReq2.setValuesData(hrValues);
+        saveReq2.setTablesData("{}");
+        saveReq2.setAttachments("[]");
+
+        Submission sub2 = submissionController.saveDraft(saveReq2).getBody();
+        assertNotNull(sub2);
+        // Verify that the status of BOTH registrar and hr are present (successfully merged!)
+        assertTrue(sub2.getValuesData().contains("registrar"));
+        assertTrue(sub2.getValuesData().contains("hr"));
+        assertTrue(sub2.getValuesData().contains("HR User"));
+        assertTrue(sub2.getValuesData().contains("Registrar User"));
+    }
 }

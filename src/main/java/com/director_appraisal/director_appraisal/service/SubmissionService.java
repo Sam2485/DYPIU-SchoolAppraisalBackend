@@ -1681,6 +1681,21 @@ public class SubmissionService {
             if ("administrativeProgress".equals(entry.getKey()) || "administrativeApprovals".equals(entry.getKey())) {
                 return;
             }
+            if ("__administrativeSubmissionStatus".equals(entry.getKey())) {
+                com.fasterxml.jackson.databind.node.ObjectNode existingStatus = null;
+                com.fasterxml.jackson.databind.JsonNode existingNode = merged.get("__administrativeSubmissionStatus");
+                if (existingNode != null && existingNode.isObject()) {
+                    existingStatus = (com.fasterxml.jackson.databind.node.ObjectNode) existingNode;
+                } else {
+                    existingStatus = mapper.createObjectNode();
+                }
+                com.fasterxml.jackson.databind.JsonNode incomingValue = entry.getValue();
+                if (incomingValue.isObject()) {
+                    existingStatus.setAll((com.fasterxml.jackson.databind.node.ObjectNode) incomingValue);
+                }
+                merged.set("__administrativeSubmissionStatus", existingStatus);
+                return;
+            }
             String section = sectionClassifier.apply(entry.getKey());
             if (ownedSections.contains(section)) {
                 if ("partESchools".equals(entry.getKey())) {
