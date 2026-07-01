@@ -534,7 +534,7 @@ public class SubmissionController {
                 || normalized.contains("researchresource") || normalized.contains("auditrecords")) {
             return "registrar-part-c";
         }
-        if (normalized.contains("faculty") || normalized.contains("staff")) {
+        if (normalized.contains("faculty") || normalized.contains("staff") || normalized.contains("bogmom")) {
             return "hr-part-b";
         }
         if (normalized.contains("hackathon")

@@ -36,4 +36,7 @@ public class StaffTraining {
     @Column(columnDefinition = "TEXT")
     private String noOfBeneficiaries;
 
+    @Column(columnDefinition = "TEXT")
+    private String attachment;
+
 }

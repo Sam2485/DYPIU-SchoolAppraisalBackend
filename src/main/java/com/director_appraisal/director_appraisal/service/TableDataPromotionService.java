@@ -205,6 +205,7 @@ public class TableDataPromotionService {
         }
         if ("attachment".equals(columnName)) {
             candidates.add(normalize("Attachment (Attach List of the Students)"));
+            candidates.add(normalize("Attachment (Report of the Event)"));
         }
 
         return candidates;

@@ -812,4 +812,118 @@ public class SubmissionIntegrationTest {
 
         assertTrue(entryNames.stream().anyMatch(name -> name.contains("admitted-students.pdf")));
     }
+
+    @Test
+    void testAdministrativeSectionBFacultyAndStaffDetails() throws Exception {
+        User hr = User.builder()
+                .email("hr@dypiu.ac.in")
+                .name("HR Officer")
+                .role("administrative")
+                .post("hr")
+                .accountType("user")
+                .status("active")
+                .password("password")
+                .build();
+        userRepository.save(hr);
+
+        authenticateAs(hr);
+
+        String valuesDataJson = "{"
+                + "\"bogMomSanctionedPostsAttachment\":["
+                + "  {\"name\":\"bog-mom.pdf\",\"url\":\"/uploads/bog-mom.pdf\"}"
+                + "]"
+                + "}";
+
+        String tablesDataJson = "{"
+                + "\"facultyInformation\":[{"
+                + "  \"Sr No\":\"1\",\"Cadre\":\"Professor\",\"Required\":\"10\",\"Regular\":\"8\",\"Contract\":\"2\""
+                + "},{"
+                + "  \"Sr No\":\"2\",\"Cadre\":\"Professors\",\"Required\":\"5\",\"Regular\":\"4\",\"Contract\":\"1\""
+                + "}],"
+                + "\"staffTraining\":[{"
+                + "  \"Sr no\":\"1\",\"Title of the Course\":\"Office Automation Training\","
+                + "  \"Details of resource person\":\"Mr. Example\","
+                + "  \"Duration and date of conduction\":\"2 days, 10-01-2026 to 11-01-2026\","
+                + "  \"No of beneficiaries\":\"25\","
+                + "  \"Attachment (Report of the Event)\":["
+                + "    {\"name\":\"training-report.pdf\",\"url\":\"/uploads/training-report.pdf\"}"
+                + "  ]"
+                + "},{"
+                + "  \"Sr no\":\"2\",\"Title of the Course\":\"Old Course\","
+                + "  \"Details of resource person\":\"Old Person\","
+                + "  \"Duration and date of conduction\":\"1 day\","
+                + "  \"No of beneficiaries\":\"10\""
+                + "}]"
+                + "}";
+
+        SubmissionController.FormSubmissionRequest saveReq = new SubmissionController.FormSubmissionRequest();
+        saveReq.setAuditType("administrative");
+        saveReq.setSharedAdministrativeForm(true);
+        saveReq.setContributorPost("hr");
+        saveReq.setSections(List.of("B"));
+        saveReq.setValuesData(valuesDataJson);
+        saveReq.setTablesData(tablesDataJson);
+        saveReq.setAttachments("[]");
+
+        // 1. Save draft
+        Submission draft = submissionController.saveDraft(saveReq).getBody();
+        assertNotNull(draft);
+        assertTrue(draft.getValuesData().contains("bogMomSanctionedPostsAttachment"));
+        assertTrue(draft.getValuesData().contains("bog-mom.pdf"));
+        assertTrue(draft.getTablesData().contains("facultyInformation"));
+        assertTrue(draft.getTablesData().contains("Professor"));
+        assertTrue(draft.getTablesData().contains("Professors"));
+        assertTrue(draft.getTablesData().contains("staffTraining"));
+        assertTrue(draft.getTablesData().contains("training-report.pdf"));
+        assertTrue(draft.getTablesData().contains("Old Course"));
+
+        // 2. Fetch/Load draft
+        Submission fetched = submissionController.getMyDraft("administrative", true).getBody();
+        assertNotNull(fetched);
+        assertTrue(fetched.getValuesData().contains("bog-mom.pdf"));
+        assertTrue(fetched.getTablesData().contains("Professor"));
+        assertTrue(fetched.getTablesData().contains("Professors"));
+        assertTrue(fetched.getTablesData().contains("training-report.pdf"));
+        assertTrue(fetched.getTablesData().contains("Old Course"));
+
+        // 3. Submit Section B
+        SubmissionController.FormSubmissionRequest submitReq = new SubmissionController.FormSubmissionRequest();
+        submitReq.setAuditType("administrative");
+        submitReq.setSharedAdministrativeForm(true);
+        submitReq.setContributorPost("hr");
+        submitReq.setSections(List.of("B"));
+        submitReq.setValuesData(valuesDataJson);
+        submitReq.setTablesData(tablesDataJson);
+        submitReq.setAttachments("[]");
+
+        Submission submitted = submissionController.submitForm(submitReq).getBody();
+        assertNotNull(submitted);
+        assertTrue(submitted.getValuesData().contains("bog-mom.pdf"));
+        assertTrue(submitted.getTablesData().contains("Professor"));
+        assertTrue(submitted.getTablesData().contains("Professors"));
+        assertTrue(submitted.getTablesData().contains("training-report.pdf"));
+
+        // 4. Attachment download extraction (IQAC)
+        submitted.setStatus("SUBMITTED");
+        submissionRepository.save(submitted);
+
+        authenticateAs(iqacUser);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        submissionController.downloadAttachments(submitted.getId(), true, response);
+
+        byte[] zipBytes = response.getContentAsByteArray();
+        assertTrue(zipBytes.length > 0);
+
+        java.util.Set<String> entryNames = new java.util.HashSet<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                entryNames.add(entry.getName());
+            }
+        }
+
+        assertTrue(entryNames.stream().anyMatch(name -> name.contains("bog-mom.pdf")));
+        assertTrue(entryNames.stream().anyMatch(name -> name.contains("training-report.pdf")));
+    }
 }

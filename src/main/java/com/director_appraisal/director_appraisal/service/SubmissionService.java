@@ -308,10 +308,11 @@ public class SubmissionService {
                 } catch (Exception ignored) {}
             }
             
-            // Delete table attachments
+            // Delete table and values attachments
             try {
                 java.util.Set<String> urls = new java.util.HashSet<>();
                 collectAttachmentUrls(submission.getTablesData(), urls);
+                collectAttachmentUrls(submission.getValuesData(), urls);
                 for (String url : urls) {
                     try {
                         attachmentService.deleteFile(url);
@@ -1689,7 +1690,10 @@ public class SubmissionService {
                 }
                 return;
             }
-            if ("partESchools".equals(entry.getKey()) || "coursesOffered".equals(entry.getKey()) || "studentStatistics".equals(entry.getKey())) {
+            if ("partESchools".equals(entry.getKey()) || "coursesOffered".equals(entry.getKey()) || "studentStatistics".equals(entry.getKey())
+                    || "facultyInformation".equals(entry.getKey()) || "facultyTenure".equals(entry.getKey())
+                    || "facultyExperience".equals(entry.getKey()) || "supportingStaff".equals(entry.getKey())
+                    || "staffTraining".equals(entry.getKey()) || "bogMomSanctionedPostsAttachment".equals(entry.getKey())) {
                 com.fasterxml.jackson.databind.JsonNode existingValue = merged.get(entry.getKey());
                 if (existingValue != null && existingValue.equals(entry.getValue())) {
                     return;
@@ -1917,7 +1921,8 @@ public class SubmissionService {
         if ("c".equals(normalized)) return "C";
         if ("d".equals(normalized)) return "D";
         if ("e".equals(normalized)) return "E";
-        if (normalized.contains("partb") || normalized.contains("hr") || normalized.contains("faculty") || normalized.contains("staff")) {
+        if (normalized.contains("partb") || normalized.contains("hr") || normalized.contains("faculty") || normalized.contains("staff")
+                || normalized.contains("bogmom")) {
             return "B";
         }
         if (normalized.contains("partc") || normalized.contains("infrastructure") || normalized.contains("statutory")
