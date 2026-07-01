@@ -149,6 +149,8 @@ Migrations are baseline managed inside the directory `src/main/resources/db/migr
 - **V8__add_administrative_attachment_columns.sql**: Adds section-specific attachment tracking columns.
 - **V9__add_indexes.sql**: Configures performance-optimizing database indexes on highly queried fields to avoid full-table scans.
 - **V10__add_submitted_by_details.sql**: Adds the `submitted_by_details` text column to track granular contributor submissions in shared administrative audits.
+- **V11__add_courses_offered_columns.sql**: Adds `students_admitted` and `attachment` columns to the `courses_offered` table for Section A.
+- **V12__add_staff_training_attachment.sql**: Adds the `attachment` column to the `staff_training` table for Section B.
 
 ---
 
