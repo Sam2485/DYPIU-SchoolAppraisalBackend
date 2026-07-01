@@ -36,4 +36,10 @@ public class CoursesOffered {
     @Column(name = "commencement_year", columnDefinition = "TEXT")
     private String yearOfCommencementOfTheProgram;
 
+    @Column(name = "students_admitted", columnDefinition = "TEXT")
+    private String studentsAdmitted;
+
+    @Column(columnDefinition = "TEXT")
+    private String attachment;
+
 }

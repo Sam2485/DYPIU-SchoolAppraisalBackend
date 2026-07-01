@@ -524,7 +524,9 @@ public class SubmissionController {
         if (normalized.contains("scholarshipsummary")
                 || normalized.contains("scholarshipdetails")
                 || normalized.contains("scholarshipstudents")
-                || normalized.contains("scholarshipstudentdetails")) {
+                || normalized.contains("scholarshipstudentdetails")
+                || normalized.contains("coursesoffered")
+                || normalized.contains("studentstatistics")) {
             return "registrar-part-a";
         }
         if (normalized.contains("statutory") || normalized.contains("infrastructure")

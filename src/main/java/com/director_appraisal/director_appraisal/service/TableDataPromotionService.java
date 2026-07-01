@@ -200,6 +200,13 @@ public class TableDataPromotionService {
             candidates.add(normalize(fieldName.substring(0, fieldName.length() - "Name".length())));
         }
 
+        if ("students_admitted".equals(columnName)) {
+            candidates.add(normalize("No. of Students Admitted"));
+        }
+        if ("attachment".equals(columnName)) {
+            candidates.add(normalize("Attachment (Attach List of the Students)"));
+        }
+
         return candidates;
     }
 

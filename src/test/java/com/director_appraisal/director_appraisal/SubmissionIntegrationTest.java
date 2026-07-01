@@ -709,4 +709,107 @@ public class SubmissionIntegrationTest {
         assertTrue(entryNames.stream().anyMatch(name -> name.contains("interaction.pdf")));
         assertTrue(entryNames.stream().anyMatch(name -> name.contains("other.pdf")));
     }
+
+    @Test
+    void testAdministrativeSectionACourseOfferedAndStudentStatistics() throws Exception {
+        User registrar = User.builder()
+                .email("registrar@dypiu.ac.in")
+                .name("Registrar")
+                .role("administrative")
+                .post("registrar")
+                .accountType("user")
+                .status("active")
+                .password("password")
+                .build();
+        userRepository.save(registrar);
+
+        authenticateAs(registrar);
+
+        String tablesDataJson = "{"
+                + "\"coursesOffered\":[{"
+                + "  \"Sr No\":\"1\",\"Name of the Program\":\"B.Tech\","
+                + "  \"Level (UG/PG)\":\"UG\",\"Intake\":\"60\","
+                + "  \"No. of Students Admitted\":\"54\","
+                + "  \"Year of Commencement of the program\":\"2022\","
+                + "  \"Attachment (Attach List of the Students)\":["
+                + "    {\"name\":\"admitted-students.pdf\",\"url\":\"/uploads/admitted-students.pdf\"}"
+                + "  ]"
+                + "}],"
+                + "\"studentStatistics\":[{"
+                + "  \"Sr No\":\"1\",\"Category\":\"SC\",\"U.G.\":\"10\",\"P.G.\":\"5\",\"Ph.D.\":\"1\","
+                + "  \"Value added / skill Courses\":\"3\""
+                + "},{"
+                + "  \"Sr No\":\"2\",\"Category\":\"Open\",\"U.G.\":\"15\",\"P.G.\":\"7\",\"Ph.D.\":\"0\","
+                + "  \"Value added / skill Courses\":\"2\""
+                + "}]"
+                + "}";
+
+        SubmissionController.FormSubmissionRequest saveReq = new SubmissionController.FormSubmissionRequest();
+        saveReq.setAuditType("administrative");
+        saveReq.setSharedAdministrativeForm(true);
+        saveReq.setContributorPost("registrar");
+        saveReq.setSections(List.of("A"));
+        saveReq.setValuesData("{}");
+        saveReq.setTablesData(tablesDataJson);
+        saveReq.setAttachments("[]");
+
+        // 1. Save draft
+        Submission draft = submissionController.saveDraft(saveReq).getBody();
+        assertNotNull(draft);
+        assertTrue(draft.getTablesData().contains("No. of Students Admitted"));
+        assertTrue(draft.getTablesData().contains("Attachment (Attach List of the Students)"));
+        assertTrue(draft.getTablesData().contains("admitted-students.pdf"));
+        assertTrue(draft.getTablesData().contains("Category"));
+        assertTrue(draft.getTablesData().contains("SC"));
+        assertTrue(draft.getTablesData().contains("Open"));
+
+        // 2. Fetch/Load draft
+        Submission fetched = submissionController.getMyDraft("administrative", true).getBody();
+        assertNotNull(fetched);
+        assertTrue(fetched.getTablesData().contains("No. of Students Admitted"));
+        assertTrue(fetched.getTablesData().contains("Attachment (Attach List of the Students)"));
+        assertTrue(fetched.getTablesData().contains("admitted-students.pdf"));
+        assertTrue(fetched.getTablesData().contains("SC"));
+        assertTrue(fetched.getTablesData().contains("Open"));
+
+        // 3. Submit Section A
+        SubmissionController.FormSubmissionRequest submitReq = new SubmissionController.FormSubmissionRequest();
+        submitReq.setAuditType("administrative");
+        submitReq.setSharedAdministrativeForm(true);
+        submitReq.setContributorPost("registrar");
+        submitReq.setSections(List.of("A"));
+        submitReq.setValuesData("{}");
+        submitReq.setTablesData(tablesDataJson);
+        submitReq.setAttachments("[]");
+
+        Submission submitted = submissionController.submitForm(submitReq).getBody();
+        assertNotNull(submitted);
+        assertTrue(submitted.getTablesData().contains("No. of Students Admitted"));
+        assertTrue(submitted.getTablesData().contains("Attachment (Attach List of the Students)"));
+        assertTrue(submitted.getTablesData().contains("admitted-students.pdf"));
+        assertTrue(submitted.getTablesData().contains("SC"));
+        assertTrue(submitted.getTablesData().contains("Open"));
+
+        // 4. Attachment download extraction (IQAC)
+        submitted.setStatus("SUBMITTED");
+        submissionRepository.save(submitted);
+
+        authenticateAs(iqacUser);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        submissionController.downloadAttachments(submitted.getId(), true, response);
+
+        byte[] zipBytes = response.getContentAsByteArray();
+        assertTrue(zipBytes.length > 0);
+
+        java.util.Set<String> entryNames = new java.util.HashSet<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                entryNames.add(entry.getName());
+            }
+        }
+
+        assertTrue(entryNames.stream().anyMatch(name -> name.contains("admitted-students.pdf")));
+    }
 }

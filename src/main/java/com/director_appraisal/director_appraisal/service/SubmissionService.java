@@ -1689,7 +1689,7 @@ public class SubmissionService {
                 }
                 return;
             }
-            if ("partESchools".equals(entry.getKey())) {
+            if ("partESchools".equals(entry.getKey()) || "coursesOffered".equals(entry.getKey()) || "studentStatistics".equals(entry.getKey())) {
                 com.fasterxml.jackson.databind.JsonNode existingValue = merged.get(entry.getKey());
                 if (existingValue != null && existingValue.equals(entry.getValue())) {
                     return;
