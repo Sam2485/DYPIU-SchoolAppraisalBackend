@@ -1881,62 +1881,97 @@ public class SubmissionService {
     }
 
     private String classifyAdministrativeTableSection(String key) {
-        String normalized = normalizeJsonKey(key);
-        if ("a".equals(normalized)) return "A";
-        if ("b".equals(normalized)) return "B";
-        if ("c".equals(normalized)) return "C";
-        if ("d".equals(normalized)) return "D";
-        if ("e".equals(normalized)) return "E";
-        if (List.of(
-                "hackathons",
-                "culturalactivities",
-                "sportsactivities",
-                "communityactivities",
-                "adminstudentawards",
-                "awardsprizesrecognitions"
-        ).contains(normalized)) {
-            return "D";
+        if (key == null) return "A";
+        String normalized = key.trim();
+        String lower = normalized.toLowerCase();
+        if ("a".equals(lower)) return "A";
+        if ("b".equals(lower)) return "B";
+        if ("c".equals(lower)) return "C";
+        if ("d".equals(lower)) return "D";
+        if ("e".equals(lower)) return "E";
+        if ("f".equals(lower)) return "F";
+
+        // Section A
+        if (List.of("coursesOffered", "studentStatistics", "statutoryBodies", "auditRecords", "scholarshipSummary", "scholarshipStudents").contains(normalized)) {
+            return "A";
         }
-        if (List.of(
-                "trainingactivities",
-                "industrycollaborations"
-        ).contains(normalized) || normalized.contains("placement")) {
-            return "E";
-        }
-        if (normalized.contains("faculty") || normalized.contains("staff")) {
+        // Section B
+        if (List.of("facultyInformation", "facultyTenure", "facultyExperience", "supportingStaff", "staffTraining").contains(normalized)) {
             return "B";
         }
-        if (normalized.contains("statutory") || normalized.contains("infrastructure") || normalized.contains("library")
-                || normalized.contains("eresource") || normalized.contains("it") || normalized.contains("sportsfacilities")
-                || normalized.contains("divyangajan") || normalized.contains("researchresource")) {
+        // Section C
+        if (List.of("buildingInfrastructure", "libraryInfrastructure", "eResources", "itInfrastructure", "sportsFacilities", "divyangajanFacilities", "researchResources").contains(normalized)) {
             return "C";
+        }
+        // Section D
+        if (List.of("hackathons", "culturalActivities", "sportsActivities", "communityActivities", "adminStudentAwards").contains(normalized)) {
+            return "D";
+        }
+        // Section E
+        if (List.of("trainingActivities", "industryCollaborations").contains(normalized) || normalized.toLowerCase().contains("placement")) {
+            return "E";
+        }
+
+        // Fallback heuristics
+        if (lower.contains("faculty") || lower.contains("staff")) {
+            return "B";
+        }
+        if (lower.contains("statutory") || lower.contains("infrastructure") || lower.contains("library")
+                || lower.contains("eresource") || lower.contains("it") || lower.contains("sportsfacilities")
+                || lower.contains("divyangajan") || lower.contains("researchresource")) {
+            return "C";
+        }
+        if (lower.contains("hackathon") || lower.contains("cultural") || lower.contains("sports")
+                || lower.contains("community") || lower.contains("adminstudentawards") || lower.contains("awardsprizes")) {
+            return "D";
         }
         return "A";
     }
 
     private String classifyAdministrativeValueSection(String key) {
-        String normalized = normalizeJsonKey(key);
-        if ("a".equals(normalized)) return "A";
-        if ("b".equals(normalized)) return "B";
-        if ("c".equals(normalized)) return "C";
-        if ("d".equals(normalized)) return "D";
-        if ("e".equals(normalized)) return "E";
-        if (normalized.contains("partb") || normalized.contains("hr") || normalized.contains("faculty") || normalized.contains("staff")
-                || normalized.contains("bogmom")) {
+        if (key == null) return "A";
+        String normalized = key.trim();
+        String lower = normalized.toLowerCase();
+        if ("a".equals(lower)) return "A";
+        if ("b".equals(lower)) return "B";
+        if ("c".equals(lower)) return "C";
+        if ("d".equals(lower)) return "D";
+        if ("e".equals(lower)) return "E";
+        if ("f".equals(lower)) return "F";
+
+        // Section B
+        if (List.of("phdQualification", "pgQualification", "otherQualification", "studentFacultyRatio", "bogMomSanctionedPostsAttachment").contains(normalized)) {
             return "B";
         }
-        if (normalized.contains("partc") || normalized.contains("infrastructure") || normalized.contains("statutory")
-                || normalized.contains("library") || normalized.contains("researchresource")) {
+        // Section E
+        if ("partESchools".equals(normalized)) {
+            return "E";
+        }
+        // Section F
+        if (List.of("auditObservations", "auditRecommendations").contains(normalized)) {
+            return "F";
+        }
+
+        // Fallback heuristics
+        if (lower.contains("partb") || lower.contains("hr") || lower.contains("faculty") || lower.contains("staff")
+                || lower.contains("bogmom")) {
+            return "B";
+        }
+        if (lower.contains("partc") || lower.contains("infrastructure") || lower.contains("statutory")
+                || lower.contains("library") || lower.contains("researchresource")) {
             return "C";
         }
-        if (normalized.contains("partd") || normalized.contains("hackathon") || normalized.contains("cultural")
-                || normalized.contains("sports") || normalized.contains("community")
-                || normalized.contains("adminstudentawards") || normalized.contains("awardsprizesrecognitions")) {
+        if (lower.contains("partd") || lower.contains("hackathon") || lower.contains("cultural")
+                || lower.contains("sports") || lower.contains("community")
+                || lower.contains("adminstudentawards") || lower.contains("awardsprizesrecognitions")) {
             return "D";
         }
-        if (normalized.contains("parte") || normalized.contains("placement") || normalized.contains("parteschools")
-                || normalized.contains("trainingactivities") || normalized.contains("industrycollaboration")) {
+        if (lower.contains("parte") || lower.contains("placement") || lower.contains("parteschools")
+                || lower.contains("trainingactivities") || lower.contains("industrycollaboration")) {
             return "E";
+        }
+        if (lower.contains("partf") || lower.contains("observation") || lower.contains("recommendation")) {
+            return "F";
         }
         return "A";
     }

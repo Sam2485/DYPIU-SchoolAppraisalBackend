@@ -526,12 +526,14 @@ public class SubmissionController {
                 || normalized.contains("scholarshipstudents")
                 || normalized.contains("scholarshipstudentdetails")
                 || normalized.contains("coursesoffered")
-                || normalized.contains("studentstatistics")) {
+                || normalized.contains("studentstatistics")
+                || normalized.contains("statutory")
+                || normalized.contains("auditrecords")) {
             return "registrar-part-a";
         }
-        if (normalized.contains("statutory") || normalized.contains("infrastructure")
+        if (normalized.contains("infrastructure")
                 || normalized.contains("library") || normalized.contains("eresource")
-                || normalized.contains("researchresource") || normalized.contains("auditrecords")) {
+                || normalized.contains("researchresource")) {
             return "registrar-part-c";
         }
         if (normalized.contains("faculty") || normalized.contains("staff") || normalized.contains("bogmom")) {
