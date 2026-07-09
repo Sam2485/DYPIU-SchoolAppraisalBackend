@@ -9,8 +9,8 @@ spring:
   
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 100MB
+      max-file-size: -1
+      max-request-size: -1
 
   # ── Database ──────────────────────────────────────────────────────────────────
   datasource:
