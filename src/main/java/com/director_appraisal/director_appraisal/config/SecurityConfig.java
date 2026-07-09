@@ -1,6 +1,7 @@
 package com.director_appraisal.director_appraisal.config;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -29,6 +30,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtRequestFilter jwtRequestFilter;
+
+    @Value("${app.security.cors.allowed-origins:http://localhost:*,http://127.0.0.1:*,http://10.100.0.23:3001,https://facultyappraisal-500016.web.app,https://dypiu-schoolappraisal-frontend-919405994318.asia-south1.run.app}")
+    private List<String> allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -74,17 +78,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of(
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-                "http://localhost:5173",
-                "http://localhost:3000",
-                "http://localhost:8000",
-                "http://localhost:5174",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:8000",
-                "https://facultyappraisal-500016.web.app",
-                "https://dypiu-schoolappraisal-frontend-919405994318.asia-south1.run.app"));
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
@@ -96,3 +90,4 @@ public class SecurityConfig {
         return source;
     }
 }
+

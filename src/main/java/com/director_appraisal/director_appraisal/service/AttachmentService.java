@@ -1,9 +1,5 @@
 package com.director_appraisal.director_appraisal.service;
 
-import com.google.cloud.storage.BlobId;
-import com.google.cloud.storage.BlobInfo;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,16 +9,16 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+/**
+ * Service to manage attachments. Now fully environment-agnostic by delegating
+ * the actual physical storage operations to the StorageService bean.
+ */
 @Service
 public class AttachmentService {
 
@@ -30,30 +26,15 @@ public class AttachmentService {
 
     private final String bucketName;
     private final String localUploadPath;
-    private Storage storage;
-    private boolean useGcp = false;
+    private final StorageService storageService;
 
     public AttachmentService(
             @Value("${app.gcp.bucket-name}") String bucketName,
             @Value("${app.upload.local-path}") String localUploadPath,
-            @Value("${app.gcp.enabled:false}") boolean gcpEnabled,
-            @Value("${USE_LOCAL_STORAGE:true}") boolean useLocalStorage) {
+            StorageService storageService) {
         this.bucketName = bucketName;
         this.localUploadPath = localUploadPath;
-        this.useGcp = gcpEnabled || !useLocalStorage;
-
-        if (this.useGcp) {
-            try {
-                // Initialize GCP Cloud Storage client
-                this.storage = StorageOptions.getDefaultInstance().getService();
-                System.out.println("GCP Cloud Storage successfully initialized with bucket: " + bucketName);
-            } catch (Exception e) {
-                System.err.println("Failed to initialize GCP Storage client: " + e.getMessage() + ". Falling back to local storage.");
-                this.useGcp = false;
-            }
-        } else {
-            System.out.println("GCP Storage disabled. Using local storage fallback.");
-        }
+        this.storageService = storageService;
     }
 
     public AttachmentResponse uploadFile(MultipartFile file) throws IOException {
@@ -80,17 +61,7 @@ public class AttachmentService {
 
     public boolean deleteFile(String fileUrl) throws IOException {
         String objectName = extractObjectName(fileUrl);
-
-        if (useGcp) {
-            return storage.delete(BlobId.of(bucketName, objectName));
-        }
-
-        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
-        Path targetLocation = uploadDir.resolve(objectName).normalize();
-        if (!targetLocation.startsWith(uploadDir)) {
-            throw new IllegalArgumentException("Invalid attachment URL.");
-        }
-        return Files.deleteIfExists(targetLocation);
+        return storageService.deleteFile(objectName);
     }
 
     private void validateFile(MultipartFile file) {
@@ -165,29 +136,8 @@ public class AttachmentService {
     }
 
     private AttachmentResponse storeFile(UploadCandidate candidate) throws IOException {
-        if (useGcp) {
-            // Upload to Google Cloud Storage bucket
-            BlobId blobId = BlobId.of(bucketName, candidate.objectName);
-            BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("application/pdf").build();
-            storage.create(blobInfo, candidate.content);
-
-            String publicUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, candidate.objectName);
-            return new AttachmentResponse(candidate.originalFilename, publicUrl);
-        } else {
-            // Local storage fallback (creates folder if not exists)
-            Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
-            if (!Files.exists(uploadDir)) {
-                Files.createDirectories(uploadDir);
-            }
-
-            Path targetLocation = uploadDir.resolve(candidate.objectName).normalize();
-            Files.createDirectories(targetLocation.getParent());
-            Files.write(targetLocation, candidate.content, StandardOpenOption.CREATE_NEW);
-
-            // Serve local file using local controller mapping /uploads/**
-            String fileUrl = "/uploads/" + candidate.objectName;
-            return new AttachmentResponse(candidate.originalFilename, fileUrl);
-        }
+        String url = storageService.storeFile(candidate.objectName, candidate.content);
+        return new AttachmentResponse(candidate.originalFilename, url);
     }
 
     private String getCurrentUserKey() {
@@ -258,23 +208,7 @@ public class AttachmentService {
             objectName = objectName.substring(1);
         }
 
-        if (useGcp) {
-            com.google.cloud.storage.Blob blob = storage.get(BlobId.of(bucketName, objectName));
-            if (blob == null) {
-                throw new IOException("File not found in GCP bucket: " + objectName);
-            }
-            return java.nio.channels.Channels.newInputStream(blob.reader());
-        }
-
-        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
-        Path targetLocation = uploadDir.resolve(objectName).normalize();
-        if (!targetLocation.startsWith(uploadDir)) {
-            throw new IllegalArgumentException("Invalid attachment URL.");
-        }
-        if (!Files.exists(targetLocation)) {
-            throw new IOException("File not found locally: " + targetLocation);
-        }
-        return Files.newInputStream(targetLocation);
+        return storageService.downloadFile(objectName);
     }
 
     public static class AttachmentResponse {
