@@ -15,7 +15,7 @@ This document details the refactoring, configuration, and migration strategies i
   * Made CORS allowed origins dynamically configurable through the `app.security.cors.allowed-origins` property.
   * Cleanly injected origins using `@Value` with a safe, backward-compatible default fallback matching the hardcoded production patterns.
 * **[application.yaml](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/resources/application.yaml)**:
-  * Added `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:vm}` to configure a default environment of `vm` if none is explicitly specified.
+  * Added `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:gcp}` to configure a default environment of `gcp` if none is explicitly specified.
 
 ### B. New Classes Created
 * **[StorageService.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/service/StorageService.java)**:
@@ -51,7 +51,7 @@ The dependency `postgres-socket-factory` and `google-cloud-storage` inside `pom.
 
 | Variable Name | Purpose | Default / Suggested Value (VM) |
 | :--- | :--- | :--- |
-| `SPRING_PROFILES_ACTIVE` | Active Spring profile | `vm` (fallback) or `gcp` |
+| `SPRING_PROFILES_ACTIVE` | Active Spring profile | `gcp` (fallback) or `vm` |
 | `DATABASE_URL` | PostgreSQL JDBC connection URL | `jdbc:postgresql://localhost:5432/director_appraisal` |
 | `DB_USERNAME` | Database username | `postgres` |
 | `DB_PASSWORD` | Database password | `postgres` |
