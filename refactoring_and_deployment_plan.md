@@ -64,6 +64,7 @@ The dependency `postgres-socket-factory` and `google-cloud-storage` inside `pom.
 | `SMTP_PASSWORD` | SMTP password / App password | `your-app-password` |
 | `MAIL_FROM` | Outgoing email from address | `your-email@gmail.com` |
 | `LOCAL_STORAGE_DIR` | Directory for local file uploads | `/opt/myapp/uploads` |
+| `BACKUP_PATH` | Directory for local backup ZIP & SQL storage | `/opt/myapp/backups` |
 | `CORS_ALLOWED_ORIGINS`| Allowed CORS domains (comma-separated)| `http://localhost:5173` |
 
 ---
