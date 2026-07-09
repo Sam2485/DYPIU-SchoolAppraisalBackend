@@ -28,7 +28,7 @@ public class BackupService {
 
     public BackupService(
             @Value("${app.upload.local-path}") String localUploadPath,
-            @Value("${app.backup.path:${BACKUP_PATH:./backups}}") String backupPath) {
+            @Value("${app.backup.path:${BACKUP_PATH:${app.upload.local-path}/backups}}") String backupPath) {
         this.localUploadPath = localUploadPath;
         this.backupPath = backupPath;
     }
@@ -47,6 +47,11 @@ public class BackupService {
             Files.walk(sourceDir).forEach(path -> {
                 try {
                     if (Files.isDirectory(path)) {
+                        return;
+                    }
+                    // Exclude any backup archives from being recursively zipped
+                    String filename = path.getFileName().toString().toLowerCase();
+                    if (filename.endsWith(".zip") || filename.endsWith(".sql")) {
                         return;
                     }
                     String zipEntryName = sourceDir.relativize(path).toString().replace("\\", "/");
