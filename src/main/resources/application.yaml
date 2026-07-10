@@ -1,5 +1,8 @@
 server:
   port: ${PORT:8080}
+  tomcat:
+    max-http-form-post-size: -1
+    max-swallow-size: -1
 
 spring:
   profiles:

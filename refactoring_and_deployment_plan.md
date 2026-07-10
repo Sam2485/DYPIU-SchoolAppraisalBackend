@@ -177,22 +177,64 @@ sudo systemctl start director-appraisal.service
 ### C. Nginx Configuration (Optional but recommended)
 Setup Nginx to reverse proxy traffic to `http://127.0.0.1:8080` and serve the local `/uploads/**` static path directly for maximum performance:
 ```nginx
-server {
-    listen 80;
-    server_name api.your-domain.com;
+# Nginx configuration for School Appraisal Dashboard (school_appraisal)
+# Place this inside: /etc/nginx/sites-available/school_appraisal
 
+# 1. BACKEND API PROXY (Port 8001)
+server {
+    listen 8001;
+    server_name 10.100.0.23;
+
+    # Allow unlimited file size for uploads backups
+    client_max_body_size 0;
+
+    # Serve uploads directly via Nginx alias
     location /uploads/ {
-        alias /opt/myapp/uploads/;
+        alias /home/dypiu/DYPIU-SchoolAppraisalBackend/uploads/;
         expires 30d;
         access_log off;
+        add_header Cache-Control "public, no-transform";
     }
 
+    # Proxy all API requests to Spring Boot
     location / {
+        proxy_pass http://127.0.0.1:8080; # Spring Boot running locally
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# 2. FRONTEND CLIENT SERVER (Port 3001)
+server {
+    listen 3001;
+    server_name 10.100.0.23;
+
+    # Allow unlimited file size for uploads backups on port 3001 as well
+    client_max_body_size 0;
+
+    # Proxy API requests to backend if they are sent to port 3001
+    location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Serve built static files directly from dist folder
+    location / {
+        root /home/dypiu/DYPIU-SchoolAppraisal-frontend/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Optional: Proxy to Vite dev server (uncomment if running npm run dev)
+    # location / {
+    #     proxy_pass http://127.0.0.1:5173;
+    #     proxy_set_header Host $host;
+    #     proxy_set_header X-Real-IP $remote_addr;
+    # }
 }
 ```
