@@ -84,7 +84,9 @@ public class BackupService {
                 (originalFilename != null ? originalFilename : "backup.zip");
         Path savedBackupPath = backupDir.resolve(savedBackupName).normalize();
         
-        file.transferTo(savedBackupPath.toFile());
+        try (InputStream is = file.getInputStream()) {
+            Files.copy(is, savedBackupPath, StandardCopyOption.REPLACE_EXISTING);
+        }
 
         // Extract the ZIP contents to the uploads folder
         Path targetDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
@@ -96,7 +98,20 @@ public class BackupService {
             ZipEntry entry;
             byte[] buffer = new byte[4096];
             while ((entry = zis.getNextEntry()) != null) {
-                Path newPath = targetDir.resolve(entry.getName()).normalize();
+                String entryName = entry.getName();
+                
+                // If ZIP was created with the top-level 'uploads' folder, strip it
+                if (entryName.startsWith("uploads/")) {
+                    entryName = entryName.substring("uploads/".length());
+                } else if (entryName.startsWith("uploads\\")) {
+                    entryName = entryName.substring("uploads\\".length());
+                }
+                
+                if (entryName.isEmpty()) {
+                    continue;
+                }
+
+                Path newPath = targetDir.resolve(entryName).normalize();
                 
                 // Security check against Zip Slip (directory traversal vulnerability)
                 if (!newPath.startsWith(targetDir)) {
