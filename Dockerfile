@@ -20,7 +20,10 @@ RUN addgroup -S spring && adduser -S spring -G spring
 
 WORKDIR /app
 
+
 # Pre-create uploads dir for local fallback storage mode
+# Pre-create uploads and logs dir for local fallback storage mode
+
 RUN mkdir -p /app/uploads /app/logs && chown -R spring:spring /app/uploads /app/logs
 
 COPY --from=build /app/target/*.jar app.jar
