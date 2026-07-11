@@ -22,9 +22,8 @@ WORKDIR /app
 
 
 # Pre-create uploads dir for local fallback storage mode
-# Pre-create uploads and logs dir for local fallback storage mode
-
-RUN mkdir -p /app/uploads /app/logs && chown -R spring:spring /app/uploads /app/logs
+# Pre-create uploads, logs and backups dir for local fallback storage mode
+RUN mkdir -p /app/uploads /app/logs /app/backups && chown -R spring:spring /app/uploads /app/logs /app/backups
 
 COPY --from=build /app/target/*.jar app.jar
 

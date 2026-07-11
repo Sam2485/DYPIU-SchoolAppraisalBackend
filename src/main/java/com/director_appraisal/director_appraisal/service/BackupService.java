@@ -110,10 +110,13 @@ public class BackupService {
         String savedBackupName = "uploads-backup-" + System.currentTimeMillis() + "-" + 
                 (originalFilename != null ? originalFilename : "backup.zip");
         Path savedBackupPath = backupDir.resolve(savedBackupName).normalize();
-        log.info("Saving uploaded ZIP file to VM backups directory: '{}'", savedBackupPath);
-        
-        try (InputStream is = file.getInputStream()) {
-            Files.copy(is, savedBackupPath, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            try (InputStream is = file.getInputStream()) {
+                Files.copy(is, savedBackupPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            log.error("Failed to copy uploaded ZIP file to target path '{}'. Error: {}", savedBackupPath, e.getMessage(), e);
+            throw e;
         }
         log.info("ZIP copy completed successfully. File size: {} bytes", Files.size(savedBackupPath));
 
@@ -159,14 +162,9 @@ public class BackupService {
                     log.info("Creating nested directory: '{}'", newPath);
                     Files.createDirectories(newPath);
                 } else {
-                    log.info("Writing file: '{}'", newPath);
+                    log.info("Writing file (overwriting if exists): '{}'", newPath);
                     Files.createDirectories(newPath.getParent());
-                    try (OutputStream os = Files.newOutputStream(newPath)) {
-                        int len;
-                        while ((len = zis.read(buffer)) > 0) {
-                            os.write(buffer, 0, len);
-                        }
-                    }
+                    Files.copy(zis, newPath, StandardCopyOption.REPLACE_EXISTING);
                     count++;
                 }
                 zis.closeEntry();
@@ -257,10 +255,13 @@ public class BackupService {
         String savedBackupName = "db-backup-" + System.currentTimeMillis() + "-" + 
                 (originalFilename != null ? originalFilename : "backup.sql");
         Path savedSqlPath = backupDir.resolve(savedBackupName).normalize();
-        log.info("Saving uploaded SQL file to VM backups directory: '{}'", savedSqlPath);
-        
-        try (InputStream is = file.getInputStream()) {
-            Files.copy(is, savedSqlPath, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            try (InputStream is = file.getInputStream()) {
+                Files.copy(is, savedSqlPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            log.error("Failed to copy uploaded SQL file to target path '{}'. Error: {}", savedSqlPath, e.getMessage(), e);
+            throw e;
         }
         log.info("SQL copy completed successfully. File size: {} bytes", Files.size(savedSqlPath));
 
