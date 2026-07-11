@@ -1,5 +1,7 @@
 package com.director_appraisal.director_appraisal.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,6 +15,8 @@ import java.util.zip.ZipOutputStream;
 
 @Service
 public class BackupService {
+
+    private static final Logger log = LoggerFactory.getLogger(BackupService.class);
 
     private final String localUploadPath;
     private final String backupPath;
@@ -29,8 +33,22 @@ public class BackupService {
     public BackupService(
             @Value("${app.upload.local-path}") String localUploadPath,
             @Value("${app.backup.path:${BACKUP_PATH:${app.upload.local-path}/backups}}") String backupPath) {
-        this.localUploadPath = localUploadPath;
-        this.backupPath = backupPath;
+        // Clean environment variable values that might contain wrapping double quotes from Docker env-file parser
+        this.localUploadPath = cleanPathQuotes(localUploadPath);
+        this.backupPath = cleanPathQuotes(backupPath);
+        log.info("Initialized BackupService. Local upload path: '{}', Backup path: '{}'", this.localUploadPath, this.backupPath);
+    }
+
+    private String cleanPathQuotes(String path) {
+        if (path == null) return null;
+        String cleaned = path.trim();
+        if (cleaned.startsWith("\"") && cleaned.endsWith("\"")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+        if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+        return cleaned.trim();
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -39,7 +57,9 @@ public class BackupService {
 
     public void createUploadsBackup(OutputStream outputStream) throws IOException {
         Path sourceDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        log.info("Starting zipping of uploads directory: '{}'", sourceDir);
         if (!Files.exists(sourceDir)) {
+            log.info("Uploads directory does not exist, creating it: '{}'", sourceDir);
             Files.createDirectories(sourceDir);
         }
 
@@ -52,18 +72,24 @@ public class BackupService {
                     // Exclude any backup archives from being recursively zipped
                     String filename = path.getFileName().toString().toLowerCase();
                     if (filename.endsWith(".zip") || filename.endsWith(".sql")) {
+                        log.debug("Skipping backup/restore system file during walk: {}", filename);
                         return;
                     }
                     String zipEntryName = sourceDir.relativize(path).toString().replace("\\", "/");
+                    log.info("Adding zip entry: {}", zipEntryName);
+                    
                     ZipEntry zipEntry = new ZipEntry(zipEntryName);
                     zos.putNextEntry(zipEntry);
                     Files.copy(path, zos);
                     zos.closeEntry();
                 } catch (IOException e) {
+                    log.error("Failed to write zip entry for path: '{}'", path, e);
                     throw new RuntimeException("Error writing zip entry: " + path, e);
                 }
             });
+            log.info("Successfully finished zipping uploads directory.");
         } catch (RuntimeException e) {
+            log.error("Error during walking/zipping uploads directory", e);
             if (e.getCause() instanceof IOException) {
                 throw (IOException) e.getCause();
             }
@@ -72,9 +98,10 @@ public class BackupService {
     }
 
     public void restoreUploadsBackup(MultipartFile file) throws IOException {
-        // Ensure the backup directory exists
         Path backupDir = Paths.get(backupPath).toAbsolutePath().normalize();
+        log.info("Restoring uploads backup. Active backup directory: '{}'", backupDir);
         if (!Files.exists(backupDir)) {
+            log.info("Backup directory does not exist, creating it: '{}'", backupDir);
             Files.createDirectories(backupDir);
         }
 
@@ -83,22 +110,28 @@ public class BackupService {
         String savedBackupName = "uploads-backup-" + System.currentTimeMillis() + "-" + 
                 (originalFilename != null ? originalFilename : "backup.zip");
         Path savedBackupPath = backupDir.resolve(savedBackupName).normalize();
+        log.info("Saving uploaded ZIP file to VM backups directory: '{}'", savedBackupPath);
         
         try (InputStream is = file.getInputStream()) {
             Files.copy(is, savedBackupPath, StandardCopyOption.REPLACE_EXISTING);
         }
+        log.info("ZIP copy completed successfully. File size: {} bytes", Files.size(savedBackupPath));
 
         // Extract the ZIP contents to the uploads folder
         Path targetDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        log.info("Extracting ZIP contents to target uploads folder: '{}'", targetDir);
         if (!Files.exists(targetDir)) {
+            log.info("Target uploads directory does not exist, creating it: '{}'", targetDir);
             Files.createDirectories(targetDir);
         }
 
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(savedBackupPath))) {
             ZipEntry entry;
             byte[] buffer = new byte[4096];
+            int count = 0;
             while ((entry = zis.getNextEntry()) != null) {
                 String entryName = entry.getName();
+                log.info("Processing zip entry: '{}'", entryName);
                 
                 // If ZIP was created with the top-level 'uploads' folder, strip it
                 if (entryName.startsWith("uploads/")) {
@@ -108,19 +141,25 @@ public class BackupService {
                 }
                 
                 if (entryName.isEmpty()) {
+                    log.info("Skipping empty top-level directory entry");
                     continue;
                 }
 
                 Path newPath = targetDir.resolve(entryName).normalize();
+                log.info("Resolved entry target path: '{}'", newPath);
                 
                 // Security check against Zip Slip (directory traversal vulnerability)
                 if (!newPath.startsWith(targetDir)) {
+                    log.error("Zip Slip security check failed for entry: '{}'! Resolved path: '{}' is outside of target directory: '{}'", 
+                            entry.getName(), newPath, targetDir);
                     throw new IOException("Entry is outside of the target directory: " + entry.getName());
                 }
 
                 if (entry.isDirectory()) {
+                    log.info("Creating nested directory: '{}'", newPath);
                     Files.createDirectories(newPath);
                 } else {
+                    log.info("Writing file: '{}'", newPath);
                     Files.createDirectories(newPath.getParent());
                     try (OutputStream os = Files.newOutputStream(newPath)) {
                         int len;
@@ -128,9 +167,11 @@ public class BackupService {
                             os.write(buffer, 0, len);
                         }
                     }
+                    count++;
                 }
                 zis.closeEntry();
             }
+            log.info("Successfully extracted {} files from uploads ZIP archive.", count);
         }
     }
 
@@ -143,9 +184,11 @@ public class BackupService {
         String host = extractHostFromUrl(dbUrl);
         String port = extractPortFromUrl(dbUrl);
 
+        log.info("Starting database backup dump. DB Name: '{}', Host: '{}', Port: '{}'", dbName, host, port);
+
         ProcessBuilder pb;
         if (dbUrl.contains("socketFactory")) {
-            // GCP Cloud SQL connection, use standard pg_dump via default socket settings
+            log.info("GCP Cloud SQL connection detected. Using socketpg_dump command.");
             pb = new ProcessBuilder(
                     "pg_dump",
                     "-U", dbUsername,
@@ -155,7 +198,7 @@ public class BackupService {
                     dbName
             );
         } else {
-            // Standard TCP connection
+            log.info("Standard TCP database connection detected. Using standard TCP command.");
             pb = new ProcessBuilder(
                     "pg_dump",
                     "-h", host,
@@ -181,28 +224,32 @@ public class BackupService {
             }
 
             int exitCode = process.waitFor();
+            log.info("pg_dump process completed with exit code: {}", exitCode);
+            
             if (exitCode != 0) {
-                // Read error output
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
                     StringBuilder err = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) {
                         err.append(line).append("\n");
                     }
+                    log.error("pg_dump process failed: {}", err);
                     throw new IOException("pg_dump failed with exit code " + exitCode + ". Error: " + err.toString());
                 }
             }
             return baos.toByteArray();
         } catch (InterruptedException e) {
+            log.error("pg_dump process interrupted", e);
             Thread.currentThread().interrupt();
             throw new IOException("pg_dump process was interrupted", e);
         }
     }
 
     public void restoreDatabaseBackup(MultipartFile file) throws IOException {
-        // Ensure the backup directory exists and save a copy of the SQL file there
         Path backupDir = Paths.get(backupPath).toAbsolutePath().normalize();
+        log.info("Restoring database backup. Active backup directory: '{}'", backupDir);
         if (!Files.exists(backupDir)) {
+            log.info("Backup directory does not exist, creating it: '{}'", backupDir);
             Files.createDirectories(backupDir);
         }
 
@@ -210,14 +257,21 @@ public class BackupService {
         String savedBackupName = "db-backup-" + System.currentTimeMillis() + "-" + 
                 (originalFilename != null ? originalFilename : "backup.sql");
         Path savedSqlPath = backupDir.resolve(savedBackupName).normalize();
-        file.transferTo(savedSqlPath.toFile());
+        log.info("Saving uploaded SQL file to VM backups directory: '{}'", savedSqlPath);
+        
+        try (InputStream is = file.getInputStream()) {
+            Files.copy(is, savedSqlPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+        log.info("SQL copy completed successfully. File size: {} bytes", Files.size(savedSqlPath));
 
         String dbName = extractDbNameFromUrl(dbUrl);
         String host = extractHostFromUrl(dbUrl);
         String port = extractPortFromUrl(dbUrl);
+        log.info("Executing psql restore to Database: '{}', Host: '{}', Port: '{}'", dbName, host, port);
 
         ProcessBuilder pb;
         if (dbUrl.contains("socketFactory")) {
+            log.info("Using GCP Cloud SQL socket restore psql config.");
             pb = new ProcessBuilder(
                     "psql",
                     "-U", dbUsername,
@@ -225,6 +279,7 @@ public class BackupService {
                     "-f", savedSqlPath.toString()
             );
         } else {
+            log.info("Using standard TCP restore psql config.");
             pb = new ProcessBuilder(
                     "psql",
                     "-h", host,
@@ -240,6 +295,7 @@ public class BackupService {
         Process process = pb.start();
         try {
             int exitCode = process.waitFor();
+            log.info("psql restore process completed with exit code: {}", exitCode);
             if (exitCode != 0) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
                     StringBuilder err = new StringBuilder();
@@ -247,10 +303,12 @@ public class BackupService {
                     while ((line = reader.readLine()) != null) {
                         err.append(line).append("\n");
                     }
+                    log.error("psql restore process failed: {}", err);
                     throw new IOException("psql failed with exit status " + exitCode + ". Error: " + err.toString());
                 }
             }
         } catch (InterruptedException e) {
+            log.error("psql restore process interrupted", e);
             Thread.currentThread().interrupt();
             throw new IOException("psql restore process was interrupted", e);
         }
@@ -261,7 +319,6 @@ public class BackupService {
     // ────────────────────────────────────────────────────────────────────────
 
     private String extractDbNameFromUrl(String url) {
-        // e.g. jdbc:postgresql://localhost:5432/school_appraisal or jdbc:postgresql:///school_appraisal?...
         String cleanUrl = url.split("\\?")[0];
         int lastSlash = cleanUrl.lastIndexOf('/');
         return cleanUrl.substring(lastSlash + 1);

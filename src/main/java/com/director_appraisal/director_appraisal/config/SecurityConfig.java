@@ -31,7 +31,7 @@ public class SecurityConfig {
 
     private final JwtRequestFilter jwtRequestFilter;
 
-    @Value("${app.security.cors.allowed-origins:http://localhost:*,http://127.0.0.1:*,http://10.100.0.23:3001,https://facultyappraisal-500016.web.app,https://dypiu-schoolappraisal-frontend-919405994318.asia-south1.run.app}")
+    @Value("${app.security.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:*,http://10.100.0.23:3001,https://facultyappraisal-500016.web.app,https://dypiu-schoolappraisal-frontend-919405994318.asia-south1.run.app}")
     private List<String> allowedOrigins;
 
     @Bean
