@@ -94,6 +94,12 @@ The **AttachmentService** implements an adaptive dual-storage workflow for proce
    If the file already exists at this path, the service rejects the request with an error to prevent duplicate storage.
 2. **Multiple Upload support**: `uploadFiles` handles bulk uploads of files. It verifies that all files are PDFs and do not exceed the 10MB limit, then processes them sequentially.
 3. **Ownership Verification for Deletes**: When a user attempts to delete an attachment (via `deleteFile`), the service extracts the object name from the URL, computes the current user's key hash, and verifies that the file prefix matches `users/<currentUserKey_hash>/attachments/`. If it does not match, it throws `You can only delete your own uploaded files.` to prevent unauthorized deletions.
+4. **Dynamic URL Resolution for VM/Local Deployments**: 
+   When running the application with `GCP_ENABLED: false` (e.g., on a local VM), database records migrated from GCP will still contain absolute GCS URLs starting with `https://storage.googleapis.com/...`. 
+   To handle this seamlessly without manual SQL updates or affecting GCP production, the backend intercepts Jackson serialization at the JPA level inside the `Submission` and `Snapshot` models using custom getters. 
+   - These getters route their JSON values (`valuesData`, `tablesData`, and `attachments`) through the `UrlPostProcessor` utility.
+   - If `app.gcp.enabled` is `false`, any absolute Google Cloud Storage URLs are dynamically converted to local relative paths (e.g., `/uploads/users/...`) before being returned to the client.
+   - If `app.gcp.enabled` is `true` (GCP production), the URLs are returned completely unmodified.
 
 ---
 

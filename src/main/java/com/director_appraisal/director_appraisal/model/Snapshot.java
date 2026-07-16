@@ -42,4 +42,16 @@ public class Snapshot {
     private String academicYear;
     private String auditCycle;
     private String schoolGroup;
+
+    public String getValuesData() {
+        return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(valuesData);
+    }
+
+    public String getTablesData() {
+        return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(tablesData);
+    }
+
+    public String getAttachments() {
+        return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(attachments);
+    }
 }
