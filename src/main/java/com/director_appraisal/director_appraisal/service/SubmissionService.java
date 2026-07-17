@@ -737,7 +737,7 @@ public class SubmissionService {
             return false;
         }
 
-        boolean statusMatch = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED").contains(submission.getStatus().toUpperCase());
+        boolean statusMatch = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED").contains(submission.getStatus().toUpperCase());
         if (!statusMatch) {
             return false;
         }
@@ -752,9 +752,11 @@ public class SubmissionService {
             return false;
         }
 
-        String forwardedType = submission.getForwardedAuditorType();
-        if (forwardedType == null || !forwardedType.equalsIgnoreCase(auditor.getAuditorType())) {
-            return false;
+        if ("external".equalsIgnoreCase(auditor.getAuditorType())) {
+            String forwardedType = submission.getForwardedAuditorType();
+            if (forwardedType == null || !forwardedType.equalsIgnoreCase(auditor.getAuditorType())) {
+                return false;
+            }
         }
 
         if ("academic".equalsIgnoreCase(auditType)) {
@@ -911,7 +913,7 @@ public class SubmissionService {
             List<Submission> allSubmissions = submissionRepository.findAll();
             return allSubmissions.stream()
                     .filter(sub -> {
-                        boolean matchesStatus = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED").contains(sub.getStatus().toUpperCase());
+                        boolean matchesStatus = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED").contains(sub.getStatus().toUpperCase());
                         if (!matchesStatus) {
                             return false;
                         }
