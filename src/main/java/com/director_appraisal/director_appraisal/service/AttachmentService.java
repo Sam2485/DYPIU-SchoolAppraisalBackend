@@ -22,7 +22,7 @@ import java.util.UUID;
 @Service
 public class AttachmentService {
 
-    public static final long MAX_PDF_SIZE_BYTES = 10L * 1024L * 1024L;
+    public static final long MAX_FILE_SIZE_BYTES = 25L * 1024L * 1024L;
 
     private final String bucketName;
     private final String localUploadPath;
@@ -70,14 +70,14 @@ public class AttachmentService {
         }
 
         // Validate size
-        if (file.getSize() > MAX_PDF_SIZE_BYTES) {
-            throw new IllegalArgumentException("File size exceeds maximum limit of 10MB.");
+        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
+            throw new IllegalArgumentException("File size exceeds maximum limit of 25MB.");
         }
 
-        // Validate type (PDF only)
+        // Validate type
         String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".pdf")) {
-            throw new IllegalArgumentException("Invalid file type. Only PDF files are allowed.");
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new IllegalArgumentException("Invalid filename.");
         }
     }
 
@@ -213,15 +213,21 @@ public class AttachmentService {
 
     public static class AttachmentResponse {
         private final String name;
+        private final String fileName;
         private final String url;
 
         public AttachmentResponse(String name, String url) {
             this.name = name;
+            this.fileName = name;
             this.url = url;
         }
 
         public String getName() {
             return name;
+        }
+
+        public String getFileName() {
+            return fileName;
         }
 
         public String getUrl() {
