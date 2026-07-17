@@ -2089,16 +2089,16 @@ public class SubmissionService {
             fileName = fileNameFromUrl(url);
         }
         String sanitized = sanitizeAttachmentFilename(fileName);
-        if (!sanitized.toLowerCase().endsWith(".pdf")) {
-            throw new IllegalArgumentException("Only PDF attachments are allowed");
+        if (sanitized == null || sanitized.isBlank()) {
+            throw new IllegalArgumentException("Attachment filename is invalid");
         }
 
         String size = textField(node, "size", "fileSize");
         if (size != null) {
             try {
                 long parsedSize = Long.parseLong(size);
-                if (parsedSize > AttachmentService.MAX_PDF_SIZE_BYTES) {
-                    throw new IllegalArgumentException("Attachment file size exceeds maximum limit of 10MB");
+                if (parsedSize > AttachmentService.MAX_FILE_SIZE_BYTES) {
+                    throw new IllegalArgumentException("Attachment file size exceeds maximum limit of 25MB");
                 }
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Attachment file size must be numeric");
