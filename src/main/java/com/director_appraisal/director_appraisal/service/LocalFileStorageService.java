@@ -75,4 +75,23 @@ public class LocalFileStorageService implements StorageService {
 
         return Files.newInputStream(targetLocation);
     }
+
+    @Override
+    public void deleteDirectory(String prefix) throws IOException {
+        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        Path targetDir = uploadDir.resolve(prefix).normalize();
+        
+        // Safety check to prevent Directory Traversal attacks
+        if (!targetDir.startsWith(uploadDir)) {
+            throw new IllegalArgumentException("Invalid directory path: " + prefix);
+        }
+
+        if (Files.exists(targetDir)) {
+            try (java.util.stream.Stream<Path> walk = Files.walk(targetDir)) {
+                walk.sorted(java.util.Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(java.io.File::delete);
+            }
+        }
+    }
 }

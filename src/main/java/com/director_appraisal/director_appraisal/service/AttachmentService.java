@@ -211,6 +211,25 @@ public class AttachmentService {
         return storageService.downloadFile(objectName);
     }
 
+    public String getUserKey(String email) {
+        if (email == null || email.isBlank()) {
+            return "anonymous";
+        }
+        return hashSha256(email.trim().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8)).substring(0, 16);
+    }
+
+    public void deleteUserUploads(String email) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+        String userKey = getUserKey(email);
+        try {
+            storageService.deleteDirectory("users/" + userKey + "/");
+        } catch (Exception e) {
+            System.err.println("Failed to delete user uploads folder for key: " + userKey + ". Error: " + e.getMessage());
+        }
+    }
+
     public static class AttachmentResponse {
         private final String name;
         private final String fileName;

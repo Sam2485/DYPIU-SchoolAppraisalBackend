@@ -52,4 +52,15 @@ public class GoogleCloudStorageService implements StorageService {
         }
         return Channels.newInputStream(blob.reader());
     }
+
+    @Override
+    public void deleteDirectory(String prefix) throws IOException {
+        com.google.api.gax.paging.Page<com.google.cloud.storage.Blob> blobs = storage.list(
+                bucketName,
+                Storage.BlobListOption.prefix(prefix)
+        );
+        for (com.google.cloud.storage.Blob blob : blobs.iterateAll()) {
+            storage.delete(blob.getBlobId());
+        }
+    }
 }

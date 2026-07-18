@@ -285,6 +285,9 @@ public class SubmissionService {
             return;
         }
 
+        // Completely delete the user's uploads directory from local/GCP storage
+        attachmentService.deleteUserUploads(email);
+
         List<Submission> submissions = submissionRepository.findAllByEmailIgnoreCase(email.trim());
         for (Submission submission : submissions) {
             if (submission.getId() == null) {

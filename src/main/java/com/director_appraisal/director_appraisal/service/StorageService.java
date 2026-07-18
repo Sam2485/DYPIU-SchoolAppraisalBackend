@@ -36,4 +36,12 @@ public interface StorageService {
      * @throws IOException if the file is not found or cannot be read
      */
     InputStream downloadFile(String objectName) throws IOException;
+
+    /**
+     * Deletes all files and folders under the specified prefix directory.
+     *
+     * @param prefix the directory path prefix to delete
+     * @throws IOException if an error occurs during deletion
+     */
+    void deleteDirectory(String prefix) throws IOException;
 }
