@@ -1,5 +1,8 @@
 package com.director_appraisal.director_appraisal.service;
 
+import com.director_appraisal.director_appraisal.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
+import java.security.MessageDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +23,7 @@ public class BackupService {
 
     private final String localUploadPath;
     private final String backupPath;
+    private final UserRepository userRepository;
 
     @Value("${spring.datasource.url}")
     private String dbUrl;
@@ -32,10 +36,12 @@ public class BackupService {
 
     public BackupService(
             @Value("${app.upload.local-path}") String localUploadPath,
-            @Value("${app.backup.path:${BACKUP_PATH:${app.upload.local-path}/backups}}") String backupPath) {
+            @Value("${app.backup.path:${BACKUP_PATH:${app.upload.local-path}/backups}}") String backupPath,
+            UserRepository userRepository) {
         // Clean environment variable values that might contain wrapping double quotes from Docker env-file parser
         this.localUploadPath = cleanPathQuotes(localUploadPath);
         this.backupPath = cleanPathQuotes(backupPath);
+        this.userRepository = userRepository;
         log.info("Initialized BackupService. Local upload path: '{}', Backup path: '{}'", this.localUploadPath, this.backupPath);
     }
 
@@ -170,6 +176,7 @@ public class BackupService {
                 zis.closeEntry();
             }
             log.info("Successfully extracted {} files from uploads ZIP archive.", count);
+            organizeUploadsDirectories();
         }
     }
 
@@ -347,6 +354,124 @@ public class BackupService {
             return parts.length > 1 ? parts[1] : "5432";
         } catch (Exception e) {
             return "5432";
+        }
+    }
+
+    private String cleanAdministrativePostName(String post) {
+        if (post == null || post.isBlank()) {
+            return "";
+        }
+        return post.trim().toLowerCase().replace(" ", "_").replace("-", "_");
+    }
+
+    private String getReadableName(com.director_appraisal.director_appraisal.model.User user) {
+        String post = user.getPost();
+        String school = user.getSchool();
+        String role = user.getRole();
+        String email = user.getEmail();
+
+        if (post != null && !post.trim().isEmpty()) {
+            return cleanAdministrativePostName(post);
+        } else if (school != null && !school.trim().isEmpty()) {
+            return school.trim().toUpperCase().replace(" ", "_").replace("-", "_");
+        } else if (role != null && !role.trim().isEmpty()) {
+            return role.trim().toLowerCase().replace(" ", "_").replace("-", "_");
+        } else if (email != null && !email.trim().isEmpty()) {
+            return email.split("@")[0].toLowerCase();
+        }
+        return "unknown";
+    }
+
+    private void mergeDirectories(Path src, Path dst) throws IOException {
+        if (!Files.exists(dst)) {
+            Files.createDirectories(dst);
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(src)) {
+            for (Path entry : stream) {
+                Path target = dst.resolve(entry.getFileName());
+                if (Files.isDirectory(entry)) {
+                    mergeDirectories(entry, target);
+                } else {
+                    Files.move(entry, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+        Files.delete(src);
+    }
+
+    private String hashSha256(byte[] input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input);
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing email.", e);
+        }
+    }
+
+    @PostConstruct
+    public void organizeUploadsDirectories() {
+        log.info("Running automatic uploads directory organization...");
+        Path baseDir = Paths.get(localUploadPath, "users").toAbsolutePath().normalize();
+        if (!Files.exists(baseDir)) {
+            log.warn("Uploads base directory does not exist yet: '{}'", baseDir);
+            return;
+        }
+
+        try {
+            for (com.director_appraisal.director_appraisal.model.User user : userRepository.findAll()) {
+                String email = user.getEmail();
+                if (email == null || email.isBlank()) {
+                    continue;
+                }
+
+                String hashKey = hashSha256(email.trim().toLowerCase().getBytes(java.nio.charset.StandardCharsets.UTF_8)).substring(0, 16);
+                String readableName = getReadableName(user);
+                if ("unknown".equals(readableName)) {
+                    continue;
+                }
+
+                Path hashPath = baseDir.resolve(hashKey).normalize();
+                Path readablePath = baseDir.resolve(readableName).normalize();
+
+                log.info("Checking mapping: {} -> {}", hashKey, readableName);
+
+                // Case 1: Hash path is already a symlink
+                if (Files.isSymbolicLink(hashPath)) {
+                    Path target = Files.readSymbolicLink(hashPath);
+                    if (!target.getFileName().toString().equals(readableName)) {
+                        log.info("Updating symlink: {} -> {}", hashKey, readableName);
+                        Files.delete(hashPath);
+                        Files.createSymbolicLink(hashPath, Paths.get(readableName));
+                    }
+                }
+                // Case 2: Hash path exists as a real directory
+                else if (Files.exists(hashPath)) {
+                    if (Files.exists(readablePath)) {
+                        log.info("Target folder {} already exists, merging...", readableName);
+                        mergeDirectories(hashPath, readablePath);
+                    } else {
+                        log.info("Renaming {} -> {}", hashKey, readableName);
+                        Files.move(hashPath, readablePath);
+                    }
+                    Files.createSymbolicLink(hashPath, Paths.get(readableName));
+                }
+                // Case 3: Target path exists but symlink is missing
+                else if (Files.exists(readablePath)) {
+                    log.info("Creating missing symlink: {} -> {}", hashKey, readableName);
+                    Files.createSymbolicLink(hashPath, Paths.get(readableName));
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to organize uploads directories: {}", e.getMessage(), e);
         }
     }
 }
