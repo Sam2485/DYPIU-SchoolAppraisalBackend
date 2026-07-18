@@ -1156,14 +1156,32 @@ public class SubmissionService {
             throw new IllegalArgumentException("Previous approved submission ID must match the approved source submission");
         }
 
+        String nextValues = clearCurrentCycleReviewData(approved.getValuesData(), approved.getAuditType());
+        String nextTables = clearCurrentCycleReviewData(approved.getTablesData(), approved.getAuditType());
+        
+        if ("administrative".equalsIgnoreCase(approved.getAuditType())) {
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                com.fasterxml.jackson.databind.node.ObjectNode valuesNode = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(nextValues);
+                com.fasterxml.jackson.databind.node.ObjectNode progressNode = mapper.createObjectNode();
+                progressNode.put("registrar", "DRAFT");
+                progressNode.put("hr", "DRAFT");
+                progressNode.put("dean-student-welfare", "DRAFT");
+                progressNode.put("dean-placement", "DRAFT");
+                valuesNode.set("administrativeProgress", progressNode);
+                valuesNode.remove("__administrativeSubmissionStatus");
+                nextValues = mapper.writeValueAsString(valuesNode);
+            } catch (Exception ignored) {}
+        }
+
         Submission next = Submission.builder()
                 .email(approved.getEmail())
                 .auditType(approved.getAuditType())
                 .school(approved.getSchool())
                 .submittedBy(approved.getSubmittedBy())
                 .status("DRAFT")
-                .valuesData(clearCurrentCycleReviewData(approved.getValuesData(), approved.getAuditType()))
-                .tablesData(clearCurrentCycleReviewData(approved.getTablesData(), approved.getAuditType()))
+                .valuesData(nextValues)
+                .tablesData(nextTables)
                 .attachments(preserveApprovedVersion ? approved.getAttachments() : "[]")
                 .version(requestedNextVersion)
                 .academicYear(approved.getAcademicYear() != null ? approved.getAcademicYear() : approved.getAuditCycle())
@@ -1223,6 +1241,28 @@ public class SubmissionService {
         String auditType = resolveAuditType(submission, submission.getForwardedAuditCategory());
         if (auditType == null || auditType.isBlank()) {
             throw new IllegalArgumentException("Audit type is required to forward submission to auditor");
+        }
+
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                com.fasterxml.jackson.databind.node.ObjectNode valuesNode = objectNodeOrEmpty(mapper, submission.getValuesData());
+                com.fasterxml.jackson.databind.JsonNode progress = valuesNode.get("administrativeProgress");
+                boolean allSubmitted = ADMIN_POSTS.stream()
+                        .allMatch(post -> {
+                            if (progress == null || !progress.isObject()) {
+                                return false;
+                            }
+                            String st = progress.path(post).asText("DRAFT");
+                            return "APPROVED".equalsIgnoreCase(st) || "SUBMITTED".equalsIgnoreCase(st);
+                        });
+                if (!allSubmitted) {
+                    throw new IllegalStateException("Cannot forward to auditors until all administrative contributors have submitted their sections");
+                }
+            } catch (Exception e) {
+                if (e instanceof IllegalStateException) throw (IllegalStateException) e;
+                throw new IllegalArgumentException("Failed to validate administrative contributor progress", e);
+            }
         }
 
         List<User> selectedAuditors = selectedAuditorIds.stream()
@@ -2493,6 +2533,42 @@ public class SubmissionService {
         
         java.util.Map<String, Object> permissionMap = new java.util.HashMap<>();
         
+        // Determine cycleType and version
+        String cycleType = submission.getReportCategory() != null ? submission.getReportCategory().toLowerCase() : "internal";
+        int version = submission.getVersion() != null ? submission.getVersion() : 1;
+        
+        // Calculate contribution details for administrative user
+        boolean canEditContribution = false;
+        String contributionStatus = "pending";
+        
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            String role = user.getRole() != null ? user.getRole().toLowerCase() : "";
+            if ("administrative".equals(role)) {
+                String post = canonicalAdministrativePost(user.getPost());
+                if (post != null) {
+                    String overallStatus = submission.getStatus();
+                    boolean isDraft = "DRAFT".equalsIgnoreCase(overallStatus) || "SENT_BACK".equalsIgnoreCase(overallStatus);
+                    if (isDraft) {
+                        java.util.Map<String, String> progress = submission.getAdministrativeProgressForJson();
+                        String postStatus = progress.get(post);
+                        if (postStatus == null || "DRAFT".equalsIgnoreCase(postStatus) || "IN_PROGRESS".equalsIgnoreCase(postStatus)) {
+                            canEditContribution = true;
+                            contributionStatus = "pending";
+                        } else {
+                            contributionStatus = postStatus.toLowerCase();
+                        }
+                    } else {
+                        contributionStatus = overallStatus.toLowerCase();
+                    }
+                }
+            }
+        }
+        
+        permissionMap.put("canEditContribution", canEditContribution);
+        permissionMap.put("cycleType", cycleType);
+        permissionMap.put("version", version);
+        permissionMap.put("contributionStatus", contributionStatus);
+
         if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
             if (isIqac || isVc) {
                 permissionMap.put("canView", true);

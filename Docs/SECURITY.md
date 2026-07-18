@@ -158,5 +158,11 @@ To correctly route shared administrative audits to specialized auditors:
 - It verifies that the selected auditor has at least one post overlapping with the submission's active posts.
 - For visibility (`GET /api/submissions/all`), an administrative auditor can see submissions in the dashboard if there is a post overlap OR if they are directly assigned by ID/Email.
 
+### 5. Administrative Audit External-Cycle Workflow
+When transitioning the administrative audit to the External cycle:
+- Creating the next cycle (`version: 2`, `reportCategory: "EXTERNAL"`) resets the `administrativeProgress` of all posts (`registrar`, `hr`, `dean-student-welfare`, `dean-placement`) to `DRAFT` and removes the `__administrativeSubmissionStatus` tracking object.
+- This unlocks the respective sections, allowing administrative contributors to edit and resubmit their assigned parts for the external cycle without affecting the archived Internal version.
+- To prevent early forwarding, the backend blocks forwarding to external auditors until all four required administrative contributors have submitted their sections.
+
 
 
