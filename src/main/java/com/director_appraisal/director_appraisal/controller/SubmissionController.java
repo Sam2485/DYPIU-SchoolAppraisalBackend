@@ -183,7 +183,9 @@ public class SubmissionController {
                 request.getForwardedToAuditorEmails(),
                 request.getValuesData(),
                 request.getTablesData(),
-                request.getAttachments()
+                request.getAttachments(),
+                request.getForwardedAdministrativePosts(),
+                request.getForwardedToAuditorPosts()
         );
         return ResponseEntity.ok(updated);
     }
@@ -311,6 +313,8 @@ public class SubmissionController {
         private List<Long> forwardedToAuditorIds;
         private List<String> forwardedToAuditorNames;
         private List<String> forwardedToAuditorEmails;
+        private List<String> forwardedAdministrativePosts;
+        private List<String> forwardedToAuditorPosts;
     }
 
     @Data

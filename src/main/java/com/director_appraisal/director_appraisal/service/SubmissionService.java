@@ -683,8 +683,10 @@ public class SubmissionService {
                 .academicYear(submission.getAcademicYear())
                 .auditCycle(submission.getAuditCycle())
                 .schoolGroup(submission.getSchoolGroup())
+                .forwardedAdministrativePosts(submission.getForwardedAdministrativePosts())
+                .forwardedToAuditorPosts(submission.getForwardedToAuditorPosts())
                 .build();
-        snapshotRepository.save(snapshot);
+         snapshotRepository.save(snapshot);
     }
 
     private void createDraftSnapshot(Submission submission) {
@@ -768,11 +770,9 @@ public class SubmissionService {
             String audSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
             return subSchool != null && subSchool.equalsIgnoreCase(audSchool);
         } else if ("administrative".equalsIgnoreCase(auditType)) {
-            Optional<User> submitterOpt = userRepository.findByEmail(submission.getEmail());
-            if (submitterOpt.isPresent()) {
-                User submitter = submitterOpt.get();
-                return auditorHasAdministrativePost(auditor, submitter.getPost());
-            }
+            java.util.Set<String> auditorPosts = resolveAdministrativePosts(auditor);
+            java.util.Set<String> submissionPosts = resolveSubmissionPostsForList(submission);
+            return !submissionPosts.isEmpty() && hasPostOverlap(auditorPosts, submissionPosts);
         }
         
         return false;
@@ -945,6 +945,20 @@ public class SubmissionService {
                                        List<String> requestForwardedToAuditorNames,
                                        List<String> requestForwardedToAuditorEmails,
                                        String valuesData, String tablesData, String attachments) {
+        return updateSubmission(id, caller, status, forwardedAuditorType, forwardedAuditCategory,
+                requestForwardedToAuditorIds, requestForwardedToAuditorNames, requestForwardedToAuditorEmails,
+                valuesData, tablesData, attachments, null, null);
+    }
+
+    @Transactional
+    public Submission updateSubmission(Long id, User caller, String status, String forwardedAuditorType,
+                                       String forwardedAuditCategory,
+                                       List<Long> requestForwardedToAuditorIds,
+                                       List<String> requestForwardedToAuditorNames,
+                                       List<String> requestForwardedToAuditorEmails,
+                                       String valuesData, String tablesData, String attachments,
+                                       List<String> forwardedAdministrativePosts,
+                                       List<String> forwardedToAuditorPosts) {
         Submission submission = submissionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
 
@@ -1017,7 +1031,9 @@ public class SubmissionService {
                 assignSelectedAuditorsForReview(
                         submission,
                         forwardedAuditorType,
-                        requestForwardedToAuditorIds
+                        requestForwardedToAuditorIds,
+                        forwardedAdministrativePosts,
+                        forwardedToAuditorPosts
                 );
                 submission.setStatus("UNDER_REVIEW");
             } else if (upperStatus.equals("SUBMITTED")) {
@@ -1054,6 +1070,12 @@ public class SubmissionService {
                 }
                 if (requestForwardedToAuditorEmails != null) {
                     submission.setForwardedToAuditorEmails(mapper.writeValueAsString(requestForwardedToAuditorEmails));
+                }
+                if (forwardedAdministrativePosts != null) {
+                    submission.setForwardedAdministrativePosts(mapper.writeValueAsString(forwardedAdministrativePosts));
+                }
+                if (forwardedToAuditorPosts != null) {
+                    submission.setForwardedToAuditorPosts(mapper.writeValueAsString(forwardedToAuditorPosts));
                 }
             } catch (Exception e) {
                 System.err.println("Error serializing requested auditors: " + e.getMessage());
@@ -1182,7 +1204,7 @@ public class SubmissionService {
         return status != null && NORMALIZED_TABLE_STATUSES.contains(status.toUpperCase());
     }
 
-    private void assignSelectedAuditorsForReview(Submission submission, String forwardedAuditorType, List<Long> selectedAuditorIds) {
+    private void assignSelectedAuditorsForReview(Submission submission, String forwardedAuditorType, List<Long> selectedAuditorIds, List<String> forwardedAdministrativePosts, List<String> forwardedToAuditorPosts) {
         if (submission.getId() == null) {
             throw new IllegalStateException("Submission must be saved before auditor assignment");
         }
@@ -1209,10 +1231,10 @@ public class SubmissionService {
                         .orElseThrow(() -> new IllegalArgumentException("Selected auditor not found: " + id)))
                 .toList();
 
-        String submitterPost = resolveAdministrativePost(submission);
-        String submissionSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+        java.util.Set<String> submissionPosts = resolveSubmissionPosts(submission, forwardedAdministrativePosts);
+
         for (User auditor : selectedAuditors) {
-            validateSelectedAuditor(auditor, auditType, requestedType, submissionSchool, submitterPost);
+            validateSelectedAuditor(auditor, auditType, requestedType, submission, submissionPosts);
         }
 
         ObjectMapper mapper = new ObjectMapper();
@@ -1220,6 +1242,12 @@ public class SubmissionService {
             submission.setForwardedToAuditorIds(mapper.writeValueAsString(selectedAuditors.stream().map(User::getId).toList()));
             submission.setForwardedToAuditorNames(mapper.writeValueAsString(selectedAuditors.stream().map(User::getName).toList()));
             submission.setForwardedToAuditorEmails(mapper.writeValueAsString(selectedAuditors.stream().map(User::getEmail).toList()));
+            if (forwardedAdministrativePosts != null) {
+                submission.setForwardedAdministrativePosts(mapper.writeValueAsString(forwardedAdministrativePosts));
+            }
+            if (forwardedToAuditorPosts != null) {
+                submission.setForwardedToAuditorPosts(mapper.writeValueAsString(forwardedToAuditorPosts));
+            }
         } catch (Exception e) {
             throw new IllegalStateException("Unable to store selected auditor metadata", e);
         }
@@ -1244,7 +1272,7 @@ public class SubmissionService {
                 .build()));
     }
 
-    private void validateSelectedAuditor(User auditor, String auditType, String requestedType, String submissionSchool, String submitterPost) {
+    private void validateSelectedAuditor(User auditor, String auditType, String requestedType, Submission submission, java.util.Set<String> submissionPosts) {
         String role = normalize(auditor.getRole());
         String accountType = normalize(auditor.getAccountType());
         if (!"auditor".equals(accountType) && (role == null || !role.contains("auditor"))) {
@@ -1257,12 +1285,14 @@ public class SubmissionService {
             throw new IllegalArgumentException("Selected auditor type does not match requested auditor type: " + auditor.getEmail());
         }
         if ("academic".equalsIgnoreCase(auditType)) {
+            String submissionSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
             String auditorSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
             if (submissionSchool == null || auditorSchool == null || !submissionSchool.equalsIgnoreCase(auditorSchool)) {
                 throw new IllegalArgumentException("Academic auditor must match the submission school: " + auditor.getEmail());
             }
         } else if ("administrative".equalsIgnoreCase(auditType)) {
-            if (submitterPost == null || !auditorHasAdministrativePost(auditor, submitterPost)) {
+            java.util.Set<String> auditorPosts = resolveAdministrativePosts(auditor);
+            if (submissionPosts.isEmpty() || !hasPostOverlap(auditorPosts, submissionPosts)) {
                 throw new IllegalArgumentException("Administrative auditor must match the administrative post: " + auditor.getEmail());
             }
         }
@@ -2011,7 +2041,7 @@ public class SubmissionService {
             case "registrar" -> "registrar";
             case "hr", "human-resources", "human-resource" -> "hr";
             case "dsw", "student-welfare", "dean-student-welfare", "dean-of-student-welfare" -> "dean-student-welfare";
-            case "dean-placement", "placement", "dean-of-placement" -> "dean-placement";
+            case "dean-placement", "placement", "dean-of-placement", "deanplacement" -> "dean-placement";
             default -> normalized;
         };
     }
@@ -2512,5 +2542,121 @@ public class SubmissionService {
         }
         
         submission.setPermissions(permissionMap);
+    }
+
+    private java.util.Set<String> resolveSubmissionPosts(Submission submission, List<String> requestForwardedPosts) {
+        java.util.Set<String> posts = new java.util.HashSet<>();
+        
+        if (requestForwardedPosts != null) {
+            requestForwardedPosts.stream()
+                .map(this::canonicalAdministrativePost)
+                .filter(p -> p != null && !p.isBlank())
+                .forEach(posts::add);
+        }
+        
+        try {
+            java.util.Map<String, String> progress = submission.getAdministrativeProgressForJson();
+            if (progress != null) {
+                progress.forEach((post, status) -> {
+                    if (status != null && List.of("SUBMITTED", "APPROVED", "UNDER_REVIEW", "AUDITOR_COMPLETED").contains(status.toUpperCase())) {
+                        String np = canonicalAdministrativePost(post);
+                        if (np != null && !np.isBlank()) {
+                            posts.add(np);
+                        }
+                    }
+                });
+            }
+        } catch (Exception ignored) {}
+        
+        try {
+            if (submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
+                ObjectMapper mapper = new ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(submission.getValuesData());
+                com.fasterxml.jackson.databind.JsonNode statusNode = rootNode.get("__administrativeSubmissionStatus");
+                if (statusNode != null && statusNode.isObject()) {
+                    statusNode.fields().forEachRemaining(entry -> {
+                        com.fasterxml.jackson.databind.JsonNode subNode = entry.getValue().get("submitted");
+                        if (subNode != null && subNode.asBoolean()) {
+                            String np = canonicalAdministrativePost(entry.getKey());
+                            if (np != null && !np.isBlank()) {
+                                posts.add(np);
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return posts;
+    }
+
+    private java.util.Set<String> resolveSubmissionPostsForList(Submission submission) {
+        java.util.Set<String> posts = new java.util.HashSet<>();
+        
+        String favPosts = submission.getForwardedAdministrativePosts();
+        if (favPosts != null && !favPosts.isBlank()) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                java.util.List<String> list = mapper.readValue(favPosts, java.util.List.class);
+                if (list != null) {
+                    list.stream()
+                        .map(this::canonicalAdministrativePost)
+                        .filter(p -> p != null && !p.isBlank())
+                        .forEach(posts::add);
+                }
+            } catch (Exception ignored) {}
+        }
+        
+        try {
+            java.util.Map<String, String> progress = submission.getAdministrativeProgressForJson();
+            if (progress != null) {
+                progress.forEach((post, status) -> {
+                    if (status != null && List.of("SUBMITTED", "APPROVED", "UNDER_REVIEW", "AUDITOR_COMPLETED").contains(status.toUpperCase())) {
+                        String np = canonicalAdministrativePost(post);
+                        if (np != null && !np.isBlank()) {
+                            posts.add(np);
+                        }
+                    }
+                });
+            }
+        } catch (Exception ignored) {}
+        
+        try {
+            if (submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
+                ObjectMapper mapper = new ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(submission.getValuesData());
+                com.fasterxml.jackson.databind.JsonNode statusNode = rootNode.get("__administrativeSubmissionStatus");
+                if (statusNode != null && statusNode.isObject()) {
+                    statusNode.fields().forEachRemaining(entry -> {
+                        com.fasterxml.jackson.databind.JsonNode subNode = entry.getValue().get("submitted");
+                        if (subNode != null && subNode.asBoolean()) {
+                            String np = canonicalAdministrativePost(entry.getKey());
+                            if (np != null && !np.isBlank()) {
+                                posts.add(np);
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return posts;
+    }
+
+    private boolean hasPostOverlap(java.util.Set<String> auditorPosts, java.util.Set<String> submissionPosts) {
+        java.util.Set<String> normalizedAuditor = new java.util.HashSet<>();
+        for (String p : auditorPosts) {
+            String cp = canonicalAdministrativePost(p);
+            if (cp != null) normalizedAuditor.add(cp);
+        }
+        
+        java.util.Set<String> normalizedSubmission = new java.util.HashSet<>();
+        for (String p : submissionPosts) {
+            String cp = canonicalAdministrativePost(p);
+            if (cp != null) normalizedSubmission.add(cp);
+        }
+        
+        normalizedAuditor.retainAll(normalizedSubmission);
+        return !normalizedAuditor.isEmpty();
     }
 }

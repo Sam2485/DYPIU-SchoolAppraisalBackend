@@ -104,6 +104,12 @@ public class Submission {
     @Transient
     private java.util.Map<String, Object> permissions;
 
+    @Column(columnDefinition = "TEXT")
+    private String forwardedAdministrativePosts;
+
+    @Column(columnDefinition = "TEXT")
+    private String forwardedToAuditorPosts;
+
     @com.fasterxml.jackson.annotation.JsonGetter("auditType")
     public String getAuditTypeForJson() {
         return auditType != null ? auditType.toUpperCase() : null;
@@ -204,5 +210,25 @@ public class Submission {
 
     public String getAttachments() {
         return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(attachments);
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("forwardedAdministrativePosts")
+    public Object getForwardedAdministrativePostsForJson() {
+        if (forwardedAdministrativePosts != null && !forwardedAdministrativePosts.isBlank()) {
+            try {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(forwardedAdministrativePosts, java.util.List.class);
+            } catch (Exception ignored) {}
+        }
+        return java.util.List.of();
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("forwardedToAuditorPosts")
+    public Object getForwardedToAuditorPostsForJson() {
+        if (forwardedToAuditorPosts != null && !forwardedToAuditorPosts.isBlank()) {
+            try {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(forwardedToAuditorPosts, java.util.List.class);
+            } catch (Exception ignored) {}
+        }
+        return java.util.List.of();
     }
 }

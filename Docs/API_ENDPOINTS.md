@@ -159,7 +159,30 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
     "attachments": "..."
   }
   ```
-- **Response (200 OK)**: Updated submission object.
+- **Response (200 OK)**: Updated submission object. When fetching a submission (either via `GET /{id}` or in the lists returned by `GET /all`), if it is an administrative audit, it dynamically includes a transient **`permissions`** property describing the caller's post-level edit capabilities:
+  ```json
+  {
+    "id": 1,
+    "email": "...",
+    "auditType": "ADMINISTRATIVE",
+    "status": "UNDER_REVIEW",
+    "version": 1,
+    "permissions": {
+      "canView": true,
+      "editablePosts": ["library", "examination"],
+      "readOnlyPosts": ["registrar", "hr", "dean-student-welfare", "dean-placement", "accounts"],
+      "permissions": {
+        "library": { "canEdit": true },
+        "examination": { "canEdit": true },
+        "registrar": { "canEdit": false },
+        "hr": { "canEdit": false },
+        "dean-student-welfare": { "canEdit": false },
+        "dean-placement": { "canEdit": false },
+        "accounts": { "canEdit": false }
+      }
+    }
+  }
+  ```
 
 ### Review Submission (Reviewers only)
 - **URL**: `/{id}/review`

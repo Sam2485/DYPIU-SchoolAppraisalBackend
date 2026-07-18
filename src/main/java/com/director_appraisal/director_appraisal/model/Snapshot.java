@@ -43,6 +43,12 @@ public class Snapshot {
     private String auditCycle;
     private String schoolGroup;
 
+    @Column(columnDefinition = "TEXT")
+    private String forwardedAdministrativePosts;
+
+    @Column(columnDefinition = "TEXT")
+    private String forwardedToAuditorPosts;
+
     public String getValuesData() {
         return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(valuesData);
     }

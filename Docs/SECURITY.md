@@ -100,6 +100,8 @@ To allow seamless connection with frontends (e.g., Vite/React developer servers 
 
 ---
 
+---
+
 ## 5. Password Reset Security
 To protect user accounts from token harvesting, the system secures reset tokens using a one-way hashing design and conditional response protection:
 1. **Token Generation:** The system generates a cryptographically secure random UUID token (`rawToken`) when a user requests a password reset.
@@ -109,5 +111,52 @@ To protect user accounts from token harvesting, the system secures reset tokens 
 5. **Conditional Response Hardening (Production vs Development):**
    - **GCP Production Mode (`app.gcp.enabled=true`):** The raw token is strictly omitted from the API response payload in `/forgot-password`. Users must rely solely on the reset link received in their email.
    - **Local Development Mode (`app.gcp.enabled=false`):** The raw token is returned inside the HTTP response under the `"token"` key to facilitate testing and mock mailer integration without requiring active mailbox configuration.
+
+---
+
+## 6. Administrative Auditor Post-Level Access Control
+
+To restrict auditor privileges within the shared administrative audit form, the backend enforces fine-grained section-level authorization:
+
+### 1. Token Claims & Profile Payload
+- During login and profile requests, the server resolves all administrative posts assigned to the auditor from the `user_administrative_posts` table (and falls back to their single `post` field).
+- This is returned as the `administrativePosts` array in login claims and user response payloads, which the frontend uses to render fields as editable or read-only.
+
+### 2. Dynamically Injected Permissions Map
+When fetching a submission (`GET /api/submissions/{id}` and `GET /api/submissions/all`), the backend calculates and embeds a transient `permissions` object:
+```json
+{
+  "canView": true,
+  "editablePosts": ["library", "examination"],
+  "readOnlyPosts": ["registrar", "hr", "dean-student-welfare", "dean-placement", "accounts"],
+  "permissions": {
+    "library": { "canEdit": true },
+    "examination": { "canEdit": true },
+    "registrar": { "canEdit": false },
+    "hr": { "canEdit": false },
+    "dean-student-welfare": { "canEdit": false },
+    "dean-placement": { "canEdit": false },
+    "accounts": { "canEdit": false }
+  }
+}
+```
+
+### 3. Backend Payload Validation & Protection
+To prevent unauthorized field updates (e.g. through API payload tampering), the backend inspects any incoming update request (`PUT /api/submissions/{id}`):
+- It parses incoming `valuesData` and `tablesData` fields.
+- For every updated key, it classifies which administrative post/role owns that field or section (using `resolvePostForKey`).
+- If an auditor attempts to save a change to a key belonging to a post they are **not** explicitly assigned to, the request is instantly rejected by throwing a `SecurityException`, which the global exception handler returns as an **HTTP 403 Forbidden** error.
+- All VC, IQAC, and Director flows are bypassed, preserving their standard workspace permissions.
+
+### 4. Administrative Auditor Forwarding & Visibility
+To correctly route shared administrative audits to specialized auditors:
+- When IQAC forwards a submission (`PUT /api/submissions/{id}` with status `UNDER_REVIEW`), the backend validates the assignment using the auditor's administrative posts instead of generic display labels (e.g., "Administrative Office") or email/name fields.
+- The system resolves the submission's active posts from:
+  - `request.forwardedAdministrativePosts`
+  - `submission.administrativeProgress` keys (with status submitted/approved/under-review/auditor-completed)
+  - `valuesData.__administrativeSubmissionStatus` keys (where submitted=true)
+- It verifies that the selected auditor has at least one post overlapping with the submission's active posts.
+- For visibility (`GET /api/submissions/all`), an administrative auditor can see submissions in the dashboard if there is a post overlap OR if they are directly assigned by ID/Email.
+
 
 
