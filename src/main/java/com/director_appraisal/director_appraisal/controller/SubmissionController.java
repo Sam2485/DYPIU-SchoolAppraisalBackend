@@ -193,6 +193,7 @@ public class SubmissionController {
     public ResponseEntity<List<Submission>> getAllSubmissions() {
         User user = getCurrentUserDetails();
         List<Submission> submissions = submissionService.getAllSubmissionsForUser(user);
+        submissions.forEach(sub -> submissionService.populatePermissions(sub, user));
         return ResponseEntity.ok(submissions);
     }
 
@@ -229,6 +230,7 @@ public class SubmissionController {
             return ResponseEntity.status(403).build();
         }
 
+        submissionService.populatePermissions(submission, user);
         return ResponseEntity.ok(submission);
     }
 

@@ -101,6 +101,9 @@ public class Submission {
 
     private Long nextVersionId;
 
+    @Transient
+    private java.util.Map<String, Object> permissions;
+
     @com.fasterxml.jackson.annotation.JsonGetter("auditType")
     public String getAuditTypeForJson() {
         return auditType != null ? auditType.toUpperCase() : null;

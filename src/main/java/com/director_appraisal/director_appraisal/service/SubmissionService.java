@@ -961,6 +961,10 @@ public class SubmissionService {
             throw new IllegalStateException("You are not authorized to edit this submission");
         }
 
+        if (isAssignedAuditor && "administrative".equalsIgnoreCase(submission.getAuditType())) {
+            validateAuditorAccessToUpdates(submission, caller, valuesData, tablesData);
+        }
+
         String currentStatus = submission.getStatus().toUpperCase();
         if (isApprovalStatus(currentStatus)) {
             throw new SecurityException("Cannot edit an approved submission");
@@ -2342,5 +2346,170 @@ public class SubmissionService {
 
     private String normalizeJsonKey(String value) {
         return value == null ? "" : value.toLowerCase().replaceAll("[^a-z0-9]", "");
+    }
+
+    private String resolvePostForKey(String key) {
+        if (key == null) return "registrar";
+        String lower = key.toLowerCase();
+        
+        // Explicit post name matches (priority)
+        if (lower.contains("library")) return "library";
+        if (lower.contains("examination") || lower.contains("exam")) return "examination";
+        if (lower.contains("accounts") || lower.contains("account") || lower.contains("finance")) return "accounts";
+        if (lower.contains("hr") || lower.contains("human-resource") || lower.contains("faculty") || lower.contains("staff")) return "hr";
+        if (lower.contains("placement") || lower.contains("training") || lower.contains("progression")) return "dean-placement";
+        if (lower.contains("student-welfare") || lower.contains("dsw") || lower.contains("sports") || lower.contains("cultural") || lower.contains("hackathon") || lower.contains("community")) return "dean-student-welfare";
+        if (lower.contains("registrar")) return "registrar";
+        
+        // Section heuristics (falling back to the section owners)
+        String section = classifyAdministrativeValueSection(key);
+        if ("A".equals(section) || "C".equals(section)) {
+            return "registrar";
+        } else if ("B".equals(section)) {
+            return "hr";
+        } else if ("D".equals(section)) {
+            return "dean-student-welfare";
+        } else if ("E".equals(section)) {
+            return "dean-placement";
+        }
+        
+        return "registrar"; // default fallback
+    }
+
+    public void validateAuditorAccessToUpdates(Submission submission, User auditor, String incomingValuesData, String incomingTablesData) {
+        ObjectMapper mapper = new ObjectMapper();
+        java.util.Set<String> assignedPosts = resolveAdministrativePosts(auditor);
+        
+        // Map assigned posts to canonical form for matching
+        java.util.Set<String> canonicalAssignedPosts = new java.util.HashSet<>();
+        for (String post : assignedPosts) {
+            String cp = canonicalAdministrativePost(post);
+            if (cp != null) {
+                canonicalAssignedPosts.add(cp);
+            }
+        }
+
+        try {
+            // 1. Check valuesData changes
+            if (incomingValuesData != null) {
+                com.fasterxml.jackson.databind.node.ObjectNode existingValues = objectNodeOrEmpty(mapper, submission.getValuesData());
+                com.fasterxml.jackson.databind.node.ObjectNode incomingValues = objectNodeOrEmpty(mapper, incomingValuesData);
+                
+                // Collect all keys in both existing and incoming
+                java.util.Set<String> allValueKeys = new java.util.HashSet<>();
+                existingValues.fieldNames().forEachRemaining(allValueKeys::add);
+                incomingValues.fieldNames().forEachRemaining(allValueKeys::add);
+                
+                for (String key : allValueKeys) {
+                    if (List.of("auditorSignOff", "administrativeProgress", "administrativeApprovals").contains(key)) {
+                        continue;
+                    }
+                    
+                    com.fasterxml.jackson.databind.JsonNode val1 = existingValues.get(key);
+                    com.fasterxml.jackson.databind.JsonNode val2 = incomingValues.get(key);
+                    
+                    if (val1 == null || val2 == null || !val1.equals(val2)) {
+                        String keyPost = resolvePostForKey(key);
+                        String canonicalKeyPost = canonicalAdministrativePost(keyPost);
+                        
+                        if (!canonicalAssignedPosts.contains(canonicalKeyPost)) {
+                            log.warn("Auditor {} (assigned: {}) attempted unauthorized update to field '{}' belonging to post '{}'",
+                                    auditor.getEmail(), canonicalAssignedPosts, key, canonicalKeyPost);
+                            throw new SecurityException("You do not have permission to edit fields for the post: " + keyPost);
+                        }
+                    }
+                }
+            }
+
+            // 2. Check tablesData changes
+            if (incomingTablesData != null) {
+                com.fasterxml.jackson.databind.node.ObjectNode existingTables = objectNodeOrEmpty(mapper, submission.getTablesData());
+                com.fasterxml.jackson.databind.node.ObjectNode incomingTables = objectNodeOrEmpty(mapper, incomingTablesData);
+                
+                java.util.Set<String> allTableKeys = new java.util.HashSet<>();
+                existingTables.fieldNames().forEachRemaining(allTableKeys::add);
+                incomingTables.fieldNames().forEachRemaining(allTableKeys::add);
+                
+                for (String key : allTableKeys) {
+                    com.fasterxml.jackson.databind.JsonNode val1 = existingTables.get(key);
+                    com.fasterxml.jackson.databind.JsonNode val2 = incomingTables.get(key);
+                    
+                    if (val1 == null || val2 == null || !val1.equals(val2)) {
+                        String keyPost = resolvePostForKey(key);
+                        String canonicalKeyPost = canonicalAdministrativePost(keyPost);
+                        
+                        if (!canonicalAssignedPosts.contains(canonicalKeyPost)) {
+                            log.warn("Auditor {} (assigned: {}) attempted unauthorized update to table '{}' belonging to post '{}'",
+                                    auditor.getEmail(), canonicalAssignedPosts, key, canonicalKeyPost);
+                            throw new SecurityException("You do not have permission to edit tables for the post: " + keyPost);
+                        }
+                    }
+                }
+            }
+        } catch (SecurityException se) {
+            throw se;
+        } catch (Exception e) {
+            log.error("Error validating auditor access: {}", e.getMessage(), e);
+        }
+    }
+
+    public void populatePermissions(Submission submission, User user) {
+        if (submission == null) return;
+        
+        boolean isAuditor = user.getRole().toLowerCase().contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType());
+        boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
+        boolean isVc = "vice-chancellor".equalsIgnoreCase(user.getRole());
+        
+        java.util.Map<String, Object> permissionMap = new java.util.HashMap<>();
+        
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            if (isIqac || isVc) {
+                permissionMap.put("canView", true);
+                permissionMap.put("editablePosts", java.util.Collections.emptyList());
+                permissionMap.put("readOnlyPosts", java.util.List.of("registrar", "hr", "dean-student-welfare", "dean-placement", "library", "examination", "accounts"));
+                
+                java.util.Map<String, Object> perPostPerms = new java.util.HashMap<>();
+                for (String p : java.util.List.of("registrar", "hr", "dean-student-welfare", "dean-placement", "library", "examination", "accounts")) {
+                    perPostPerms.put(p, java.util.Map.of("canEdit", false));
+                }
+                permissionMap.put("permissions", perPostPerms);
+            } else if (isAuditor) {
+                java.util.Set<String> assignedPosts = resolveAdministrativePosts(user);
+                
+                java.util.List<String> editablePosts = assignedPosts.stream()
+                        .map(p -> p.trim().toLowerCase())
+                        .collect(java.util.stream.Collectors.toList());
+                        
+                java.util.List<String> allPosts = java.util.List.of("registrar", "hr", "dean-student-welfare", "dean-placement", "library", "examination", "accounts");
+                
+                java.util.List<String> readOnlyPosts = new java.util.ArrayList<>();
+                java.util.Map<String, Object> perPostPerms = new java.util.HashMap<>();
+                
+                for (String post : allPosts) {
+                    boolean canEdit = editablePosts.contains(post);
+                    if (!canEdit) {
+                        readOnlyPosts.add(post);
+                    }
+                    perPostPerms.put(post, java.util.Map.of("canEdit", canEdit));
+                }
+                
+                permissionMap.put("canView", true);
+                permissionMap.put("editablePosts", editablePosts);
+                permissionMap.put("readOnlyPosts", readOnlyPosts);
+                permissionMap.put("permissions", perPostPerms);
+            } else {
+                permissionMap.put("canView", true);
+                permissionMap.put("editablePosts", java.util.Collections.emptyList());
+                permissionMap.put("readOnlyPosts", java.util.Collections.emptyList());
+                permissionMap.put("permissions", java.util.Collections.emptyMap());
+            }
+        } else {
+            permissionMap.put("canView", true);
+            permissionMap.put("editablePosts", java.util.Collections.emptyList());
+            permissionMap.put("readOnlyPosts", java.util.Collections.emptyList());
+            permissionMap.put("permissions", java.util.Collections.emptyMap());
+        }
+        
+        submission.setPermissions(permissionMap);
     }
 }

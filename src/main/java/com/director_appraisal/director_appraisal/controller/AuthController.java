@@ -161,7 +161,18 @@ public class AuthController {
         if (!posts.isEmpty()) {
             return posts;
         }
+        String role = user.getRole() != null ? user.getRole().toLowerCase() : "";
+        String accountType = user.getAccountType() != null ? user.getAccountType().toLowerCase() : "";
+        String category = user.getCategory() != null ? user.getCategory().toLowerCase() : "";
+        if (("auditor".equals(accountType) || role.contains("auditor")) && "administrative".equals(category) && user.getPost() != null) {
+            String canonicalPost = canonicalAdministrativePost(user.getPost());
+            return canonicalPost != null ? java.util.List.of(canonicalPost) : java.util.List.of();
+        }
         if ("administrative".equalsIgnoreCase(user.getCategory()) && user.getPost() != null) {
+            String canonicalPost = canonicalAdministrativePost(user.getPost());
+            return canonicalPost != null ? java.util.List.of(canonicalPost) : java.util.List.of();
+        }
+        if ("administrative".equals(role) && user.getPost() != null) {
             String canonicalPost = canonicalAdministrativePost(user.getPost());
             return canonicalPost != null ? java.util.List.of(canonicalPost) : java.util.List.of();
         }
