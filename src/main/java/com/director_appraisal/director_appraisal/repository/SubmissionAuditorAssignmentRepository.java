@@ -14,4 +14,5 @@ public interface SubmissionAuditorAssignmentRepository extends JpaRepository<Sub
 
     List<SubmissionAuditorAssignment> findBySubmissionIdAndAuditorId(Long submissionId, Long auditorId);
     List<SubmissionAuditorAssignment> findBySubmissionIdAndAuditorType(Long submissionId, String auditorType);
+    List<SubmissionAuditorAssignment> findByAuditorId(Long auditorId);
 }

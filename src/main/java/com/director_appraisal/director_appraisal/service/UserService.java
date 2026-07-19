@@ -101,7 +101,7 @@ public class UserService implements UserDetailsService {
         submissionService.deleteUserSubmissionsAndAttachments(user);
 
         if (user.getId() != null) {
-            auditorAssignmentRepository.deleteByAuditorId(user.getId());
+            submissionService.handleAuditorDeletionCleanup(user.getId());
             userAdministrativePostRepository.deleteByUserId(user.getId());
         }
         if (user.getEmail() != null && !user.getEmail().isBlank()) {

@@ -3122,4 +3122,130 @@ public class SubmissionService {
             }
         }
     }
+
+    @Transactional
+    public void handleAuditorDeletionCleanup(Long auditorId) {
+        List<SubmissionAuditorAssignment> deletedAssignments = auditorAssignmentRepository.findByAuditorId(auditorId);
+        if (deletedAssignments.isEmpty()) {
+            return;
+        }
+        
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // Group assignments by submissionId so we can process each submission once
+        java.util.Map<Long, java.util.List<SubmissionAuditorAssignment>> bySubmission = deletedAssignments.stream()
+                .collect(java.util.stream.Collectors.groupingBy(SubmissionAuditorAssignment::getSubmissionId));
+                
+        for (java.util.Map.Entry<Long, java.util.List<SubmissionAuditorAssignment>> entry : bySubmission.entrySet()) {
+            Long submissionId = entry.getKey();
+            java.util.List<SubmissionAuditorAssignment> auditorAssignmentsForSub = entry.getValue();
+            
+            Submission submission = submissionRepository.findByIdForUpdate(submissionId).orElse(null);
+            if (submission == null) {
+                continue;
+            }
+            
+            String auditType = submission.getAuditType();
+            
+            // Clean up valuesData, tablesData and attachments on the main submission
+            try {
+                com.fasterxml.jackson.databind.node.ObjectNode valuesNode = objectNodeOrEmpty(mapper, submission.getValuesData());
+                com.fasterxml.jackson.databind.node.ObjectNode tablesNode = objectNodeOrEmpty(mapper, submission.getTablesData());
+                
+                for (SubmissionAuditorAssignment assignment : auditorAssignmentsForSub) {
+                    if ("administrative".equalsIgnoreCase(auditType)) {
+                        String post = assignment.getPost();
+                        String canonicalPost = canonicalAdministrativePost(post);
+                        
+                        if (canonicalPost != null) {
+                            // Remove all fields in valuesData that belong to this post
+                            java.util.List<String> keysToRemove = new java.util.ArrayList<>();
+                            valuesNode.fieldNames().forEachRemaining(key -> {
+                                if (canonicalPost.equalsIgnoreCase(canonicalAdministrativePost(resolvePostForKey(key)))) {
+                                    keysToRemove.add(key);
+                                }
+                            });
+                            keysToRemove.forEach(valuesNode::remove);
+                            
+                            // Remove all tables in tablesData that belong to this post
+                            java.util.List<String> tablesToRemove = new java.util.ArrayList<>();
+                            tablesNode.fieldNames().forEachRemaining(key -> {
+                                if (canonicalPost.equalsIgnoreCase(canonicalAdministrativePost(resolvePostForKey(key)))) {
+                                    keysToRemove.add(key);
+                                }
+                            });
+                            tablesToRemove.forEach(tablesNode::remove);
+                        }
+                    } else {
+                        // Academic: clear Part E fields
+                        java.util.List<String> keysToRemove = new java.util.ArrayList<>();
+                        valuesNode.fieldNames().forEachRemaining(key -> {
+                            if ("E".equalsIgnoreCase(classifyAdministrativeValueSection(key)) || key.toLowerCase().contains("auditorsignoff")) {
+                                keysToRemove.add(key);
+                            }
+                        });
+                        keysToRemove.forEach(valuesNode::remove);
+                        
+                        java.util.List<String> tablesToRemove = new java.util.ArrayList<>();
+                        tablesNode.fieldNames().forEachRemaining(key -> {
+                            if ("E".equalsIgnoreCase(classifyAdministrativeTableSection(key))) {
+                                tablesToRemove.add(key);
+                            }
+                        });
+                        tablesToRemove.forEach(tablesNode::remove);
+                    }
+                }
+                
+                submission.setValuesData(mapper.writeValueAsString(valuesNode));
+                submission.setTablesData(mapper.writeValueAsString(tablesNode));
+            } catch (Exception e) {
+                System.err.println("Error cleaning up auditor data from submission: " + e.getMessage());
+            }
+            
+            // Delete these assignments from database now
+            for (SubmissionAuditorAssignment assignment : auditorAssignmentsForSub) {
+                auditorAssignmentRepository.delete(assignment);
+            }
+            
+            // Re-evaluate submission status based on remaining assignments
+            List<SubmissionAuditorAssignment> remainingAssignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorType(submissionId, submission.getForwardedAuditorType());
+            if (remainingAssignments.isEmpty()) {
+                remainingAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
+            }
+            
+            if (remainingAssignments.isEmpty()) {
+                // No auditors left: revert to UNDER_REVIEW (removes it from IQAC completed dashboard)
+                submission.setStatus("UNDER_REVIEW");
+                submission.setAuditorReviewedBy(null);
+                submission.setAuditorReviewedByDesignation(null);
+                submission.setAuditorReviewedByRole(null);
+                submission.setAuditorReviewedOn(null);
+            } else {
+                int total = remainingAssignments.size();
+                int submitted = (int) remainingAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
+                int pending = total - submitted;
+                boolean allSubmitted = (pending == 0);
+                
+                if (allSubmitted) {
+                    submission.setStatus("AUDITOR_COMPLETED");
+                    SubmissionAuditorAssignment lastSub = remainingAssignments.stream()
+                            .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()))
+                            .findFirst().orElse(null);
+                    if (lastSub != null) {
+                        submission.setAuditorReviewedBy(lastSub.getAuditorName());
+                        submission.setAuditorReviewedByRole("auditor");
+                        submission.setAuditorReviewedOn(lastSub.getSubmittedAt());
+                    }
+                } else {
+                    submission.setStatus("UNDER_REVIEW");
+                    submission.setAuditorReviewedBy(null);
+                    submission.setAuditorReviewedByDesignation(null);
+                    submission.setAuditorReviewedByRole(null);
+                    submission.setAuditorReviewedOn(null);
+                }
+            }
+            
+            submissionRepository.save(submission);
+        }
+    }
 }
