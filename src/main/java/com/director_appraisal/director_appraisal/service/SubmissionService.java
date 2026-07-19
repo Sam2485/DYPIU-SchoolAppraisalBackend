@@ -780,11 +780,9 @@ public class SubmissionService {
             return false;
         }
 
-        if ("external".equalsIgnoreCase(auditor.getAuditorType())) {
-            String forwardedType = submission.getForwardedAuditorType();
-            if (forwardedType == null || !forwardedType.equalsIgnoreCase(auditor.getAuditorType())) {
-                return false;
-            }
+        String forwardedType = submission.getForwardedAuditorType();
+        if (forwardedType == null || !forwardedType.equalsIgnoreCase(auditor.getAuditorType())) {
+            return false;
         }
 
         if ("academic".equalsIgnoreCase(auditType)) {
@@ -1535,11 +1533,11 @@ public class SubmissionService {
             }
         }
 
-        if (expectedFromVersion != null) {
-            return expectedFromVersion;
-        }
         if (expectedFromAuditor != null) {
             return expectedFromAuditor;
+        }
+        if (expectedFromVersion != null) {
+            return expectedFromVersion;
         }
         return "INTERNAL";
     }
