@@ -231,7 +231,7 @@ public class SubmissionController {
 
         if (!"APPROVED".equalsIgnoreCase(submission.getStatus()) && !"FINAL".equalsIgnoreCase(submission.getStatus())) {
             if (submission.getEmail() != null) {
-                Optional<User> submitter = userService.findByEmail(submission.getEmail().trim().toLowerCase());
+                java.util.Optional<User> submitter = userRepository.findByEmail(submission.getEmail().trim().toLowerCase());
                 if (submitter.isPresent() && Boolean.TRUE.equals(submitter.get().getDeleted())) {
                     throw new IllegalArgumentException("Submission not found with ID: " + id);
                 }
