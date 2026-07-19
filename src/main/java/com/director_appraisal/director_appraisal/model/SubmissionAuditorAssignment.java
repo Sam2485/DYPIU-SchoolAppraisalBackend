@@ -31,4 +31,19 @@ public class SubmissionAuditorAssignment {
     private String auditorType;
     private String category;
     private LocalDateTime assignedAt;
+    private String post;
+
+    @Builder.Default
+    private String status = "PENDING";
+
+    private LocalDateTime submittedAt;
+
+    @jakarta.persistence.Column(columnDefinition = "TEXT")
+    private String valuesData;
+
+    @jakarta.persistence.Column(columnDefinition = "TEXT")
+    private String tablesData;
+
+    @jakarta.persistence.Column(columnDefinition = "TEXT")
+    private String attachments;
 }

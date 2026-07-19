@@ -101,8 +101,34 @@ public class Submission {
 
     private Long nextVersionId;
 
+    @Builder.Default
+    private Boolean auditorCorrectionRequested = false;
+
+    @Builder.Default
+    private Boolean correctionRequestedForAuditor = false;
+
+    @Builder.Default
+    private Boolean requiresAuditorResubmission = false;
+
+    @Column(columnDefinition = "TEXT")
+    private String auditorCorrectionMessage;
+
+    private String auditorCorrectionRequestedBy;
+    private String auditorCorrectionRequestedByRole;
+    private LocalDateTime auditorCorrectionRequestedOn;
+    private LocalDateTime auditorResubmittedAt;
+
     @Transient
     private java.util.Map<String, Object> permissions;
+
+    @Transient
+    private java.util.List<java.util.Map<String, Object>> auditorAssignments;
+
+    @Transient
+    private java.util.Map<String, Object> auditorProgress;
+    
+    @Transient
+    private Boolean allAuditorsSubmitted;
 
     @Column(columnDefinition = "TEXT")
     private String forwardedAdministrativePosts;

@@ -49,6 +49,18 @@ public class Snapshot {
     @Column(columnDefinition = "TEXT")
     private String forwardedToAuditorPosts;
 
+    private Boolean auditorCorrectionRequested;
+    private Boolean correctionRequestedForAuditor;
+    private Boolean requiresAuditorResubmission;
+
+    @Column(columnDefinition = "TEXT")
+    private String auditorCorrectionMessage;
+
+    private String auditorCorrectionRequestedBy;
+    private String auditorCorrectionRequestedByRole;
+    private LocalDateTime auditorCorrectionRequestedOn;
+    private LocalDateTime auditorResubmittedAt;
+
     public String getValuesData() {
         return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(valuesData);
     }

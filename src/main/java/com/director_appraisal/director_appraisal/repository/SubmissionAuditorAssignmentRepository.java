@@ -11,4 +11,7 @@ public interface SubmissionAuditorAssignmentRepository extends JpaRepository<Sub
     boolean existsBySubmissionIdAndAuditorId(Long submissionId, Long auditorId);
     void deleteBySubmissionId(Long submissionId);
     void deleteByAuditorId(Long auditorId);
+
+    List<SubmissionAuditorAssignment> findBySubmissionIdAndAuditorId(Long submissionId, Long auditorId);
+    List<SubmissionAuditorAssignment> findBySubmissionIdAndAuditorType(Long submissionId, String auditorType);
 }

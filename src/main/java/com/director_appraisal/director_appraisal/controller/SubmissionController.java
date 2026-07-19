@@ -185,9 +185,26 @@ public class SubmissionController {
                 request.getTablesData(),
                 request.getAttachments(),
                 request.getForwardedAdministrativePosts(),
-                request.getForwardedToAuditorPosts()
+                request.getForwardedToAuditorPosts(),
+                request.getAuditorCorrectionRequested(),
+                request.getCorrectionRequestedForAuditor(),
+                request.getRequiresAuditorResubmission(),
+                request.getAuditorCorrectionMessage(),
+                request.getAuditorCorrectionRequestedBy(),
+                request.getAuditorCorrectionRequestedByRole(),
+                request.getAuditorCorrectionRequestedOn(),
+                request.getAuditorResubmittedAt(),
+                request.getRemarks()
         );
         return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/{id}/auditor-submit")
+    @PreAuthorize("hasAnyRole('ROLE_ACADEMIC-INTERNAL-AUDITOR', 'ROLE_ACADEMIC-EXTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-INTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-EXTERNAL-AUDITOR')")
+    public ResponseEntity<?> submitAuditorReview(@PathVariable Long id, @RequestBody AuditorSubmitRequest request) {
+        User user = getCurrentUserDetails();
+        Object response = submissionService.submitAuditorReview(id, user, request);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/all")
@@ -315,6 +332,15 @@ public class SubmissionController {
         private List<String> forwardedToAuditorEmails;
         private List<String> forwardedAdministrativePosts;
         private List<String> forwardedToAuditorPosts;
+        private Boolean auditorCorrectionRequested;
+        private Boolean correctionRequestedForAuditor;
+        private Boolean requiresAuditorResubmission;
+        private String auditorCorrectionMessage;
+        private String auditorCorrectionRequestedBy;
+        private String auditorCorrectionRequestedByRole;
+        private String auditorCorrectionRequestedOn;
+        private String auditorResubmittedAt;
+        private String remarks;
     }
 
     @Data
@@ -739,5 +765,24 @@ public class SubmissionController {
         private String objectKey;
         private String checksum;
         private String size;
+    }
+
+    @Data
+    public static class AuditorSubmitRequest {
+        private Long auditorId;
+        private String auditorName;
+        private String auditorEmail;
+        private String auditorType;
+        private String auditCategory;
+        private List<String> postsSubmitted;
+        private List<String> assignmentKeys;
+        private String submittedAt;
+        private String reviewStatus;
+        private String valuesData;
+        private String tablesData;
+        private String attachments;
+        private Boolean auditorCorrectionRequested;
+        private Boolean correctionRequestedForAuditor;
+        private Boolean requiresAuditorResubmission;
     }
 }
