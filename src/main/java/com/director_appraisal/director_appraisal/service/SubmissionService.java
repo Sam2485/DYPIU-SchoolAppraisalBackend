@@ -1240,8 +1240,8 @@ public class SubmissionService {
             throw new IllegalArgumentException("Source reportCategory must be INTERNAL");
         }
 
-        if (approved.getVersion() == null || approved.getVersion() != 1) {
-            throw new IllegalArgumentException("Source version must be exactly 1");
+        if (approved.getVersion() == null) {
+            approved.setVersion(1);
         }
 
         if (!"EXTERNAL".equalsIgnoreCase(clean(nextAuditorType))) {
@@ -1253,7 +1253,7 @@ public class SubmissionService {
         }
 
         Long rootSubmissionId = resolveRootSubmissionId(approved);
-        int expectedNextVersion = 2;
+        int expectedNextVersion = approved.getVersion() + 1;
 
         // Check if next cycle already exists in the database (e.g. from prior deployment or concurrency)
         Optional<Submission> existingByRootAndVersion = submissionRepository.findByRootSubmissionIdAndVersion(rootSubmissionId, expectedNextVersion);
