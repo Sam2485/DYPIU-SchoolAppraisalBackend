@@ -1470,14 +1470,11 @@ public class SubmissionService {
             }
         }
 
-        if (expectedFromAuditor != null && expectedFromVersion != null && !expectedFromAuditor.equals(expectedFromVersion)) {
-            throw new IllegalStateException("Report category does not match assigned auditor type and version");
+        if (expectedFromVersion != null) {
+            return expectedFromVersion;
         }
         if (expectedFromAuditor != null) {
             return expectedFromAuditor;
-        }
-        if (expectedFromVersion != null) {
-            return expectedFromVersion;
         }
         return "INTERNAL";
     }
