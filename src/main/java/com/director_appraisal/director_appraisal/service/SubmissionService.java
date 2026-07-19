@@ -2879,7 +2879,7 @@ public class SubmissionService {
             boolean shouldUpdate = false;
             if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
                 String assPost = canonicalAdministrativePost(assignment.getPost());
-                if (postsToSubmit.isEmpty() || (assPost != null && postsToSubmit.contains(assPost))) {
+                if (postsToSubmit.isEmpty() || assPost == null || postsToSubmit.contains(assPost)) {
                     shouldUpdate = true;
                 }
             } else {
