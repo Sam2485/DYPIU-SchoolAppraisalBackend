@@ -1142,6 +1142,7 @@ public class SubmissionService {
                             submission.setRemarks(remarks);
                         }
                     } else {
+                        System.out.println("[AUDIT_DEBUG] IQAC forwarding submission " + submission.getId() + " to auditors. AuditorType=" + forwardedAuditorType + ", ids=" + requestForwardedToAuditorIds + ", adminPosts=" + forwardedAdministrativePosts + ", auditorPosts=" + forwardedToAuditorPosts);
                         assignSelectedAuditorsForReview(
                                 submission,
                                 forwardedAuditorType,
@@ -1420,18 +1421,22 @@ public class SubmissionService {
         submission.setForwardedAt(LocalDateTime.now());
 
         LocalDateTime assignedAt = LocalDateTime.now();
+        System.out.println("[AUDIT_DEBUG] assignSelectedAuditorsForReview starting: selectedAuditors=" + selectedAuditors.stream().map(User::getEmail).toList() + ", submissionPosts=" + submissionPosts);
         for (User auditor : selectedAuditors) {
             if ("administrative".equalsIgnoreCase(auditType)) {
                 java.util.Set<String> auditorPosts = resolveAdministrativePosts(auditor);
                 java.util.Set<String> activePostsForAuditor = new java.util.HashSet<>(auditorPosts);
                 activePostsForAuditor.retainAll(submissionPosts);
                 
+                System.out.println("[AUDIT_DEBUG] Auditor: email=" + auditor.getEmail() + ", auditorPosts=" + auditorPosts + ", activePostsForAuditor=" + activePostsForAuditor);
+                
                 if (activePostsForAuditor.isEmpty()) {
                     activePostsForAuditor = auditorPosts;
+                    System.out.println("[AUDIT_DEBUG] activePostsForAuditor is empty, falling back to all auditorPosts: " + activePostsForAuditor);
                 }
                 
                 for (String post : activePostsForAuditor) {
-                    auditorAssignmentRepository.save(SubmissionAuditorAssignment.builder()
+                    SubmissionAuditorAssignment assignment = SubmissionAuditorAssignment.builder()
                             .submissionId(submission.getId())
                             .auditorId(auditor.getId())
                             .auditorName(auditor.getName())
@@ -1441,10 +1446,12 @@ public class SubmissionService {
                             .assignedAt(assignedAt)
                             .post(post)
                             .status("PENDING")
-                            .build());
+                            .build();
+                    auditorAssignmentRepository.save(assignment);
+                    System.out.println("[AUDIT_DEBUG] Saved assignment: " + assignment.getId() + " for auditor=" + auditor.getEmail() + " post=" + post);
                 }
             } else {
-                auditorAssignmentRepository.save(SubmissionAuditorAssignment.builder()
+                SubmissionAuditorAssignment assignment = SubmissionAuditorAssignment.builder()
                         .submissionId(submission.getId())
                         .auditorId(auditor.getId())
                         .auditorName(auditor.getName())
@@ -1454,7 +1461,9 @@ public class SubmissionService {
                         .assignedAt(assignedAt)
                         .post(null)
                         .status("PENDING")
-                        .build());
+                        .build();
+                auditorAssignmentRepository.save(assignment);
+                System.out.println("[AUDIT_DEBUG] Saved academic assignment: " + assignment.getId() + " for auditor=" + auditor.getEmail());
             }
         }
     }
@@ -1480,7 +1489,7 @@ public class SubmissionService {
         } else if ("administrative".equalsIgnoreCase(auditType)) {
             java.util.Set<String> auditorPosts = resolveAdministrativePosts(auditor);
             if (submissionPosts.isEmpty() || !hasPostOverlap(auditorPosts, submissionPosts)) {
-                throw new IllegalArgumentException("Administrative auditor must match the administrative post: " + auditor.getEmail());
+                System.out.println("[AUDIT_DEBUG] Warning: Selected administrative auditor has no overlap with submitted posts: " + auditor.getEmail());
             }
         }
     }
@@ -1994,8 +2003,22 @@ public class SubmissionService {
                 ? (com.fasterxml.jackson.databind.node.ObjectNode) existing.deepCopy()
                 : mapper.createObjectNode();
         ADMIN_POSTS.forEach(post -> {
-            if (!progress.has(post)) {
-                progress.put(post, "DRAFT");
+            if (!hasActiveAdministrativeUserForPost(post)) {
+                progress.put(post, "APPROVED");
+            } else {
+                if (!progress.has(post) || "APPROVED".equals(progress.path(post).asText())) {
+                    boolean hasSubmitted = false;
+                    try {
+                        com.fasterxml.jackson.databind.JsonNode statusNode = values.get("__administrativeSubmissionStatus");
+                        if (statusNode != null && statusNode.isObject() && statusNode.path(post).path("submitted").asBoolean()) {
+                            hasSubmitted = true;
+                        }
+                    } catch (Exception ignored) {}
+                    
+                    if (!hasSubmitted) {
+                        progress.put(post, "DRAFT");
+                    }
+                }
             }
         });
         return progress;
