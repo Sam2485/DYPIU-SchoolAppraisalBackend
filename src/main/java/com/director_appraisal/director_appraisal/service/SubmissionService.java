@@ -626,7 +626,9 @@ public class SubmissionService {
 
         if (isApprovalStatus(requestedStatus)) {
             validateReviewer(reviewer);
+            System.out.println("[AUDIT_DEBUG] reviewSubmission: id=" + id + ", version=" + submission.getVersion() + ", forwardedAuditorType=" + submission.getForwardedAuditorType() + ", requestReportCategory=" + reportCategory);
             String expectedReportCategory = resolveExpectedReportCategoryForApproval(submission);
+            System.out.println("[AUDIT_DEBUG] resolved expectedReportCategory: " + expectedReportCategory);
             validateReportCategory(reportCategory, expectedReportCategory);
             submission.setStatus(STATUS_APPROVED_LEGACY);
             submission.setReportCategory(expectedReportCategory);
