@@ -2899,14 +2899,118 @@ public class SubmissionService {
         Submission submission = submissionRepository.findByIdForUpdate(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + submissionId));
                 
-        List<SubmissionAuditorAssignment> assignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorId(submissionId, caller.getId());
-        if (assignments.isEmpty()) {
+        java.util.Set<String> auditorPosts = resolveAdministrativePosts(caller);
+        List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
+        
+        boolean isAssigned = false;
+        List<SubmissionAuditorAssignment> assignments = new java.util.ArrayList<>();
+        
+        if (!allAssignments.isEmpty()) {
+            List<SubmissionAuditorAssignment> callerAssignments = allAssignments.stream()
+                    .filter(a -> caller.getId().equals(a.getAuditorId()) || (caller.getEmail() != null && caller.getEmail().equalsIgnoreCase(a.getAuditorEmail())))
+                    .toList();
+                    
+            if (!callerAssignments.isEmpty()) {
+                for (SubmissionAuditorAssignment assignment : callerAssignments) {
+                    String canonicalPost = canonicalAdministrativePost(assignment.getPost());
+                    if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+                        if (canonicalPost != null && auditorPosts.contains(canonicalPost)) {
+                            isAssigned = true;
+                            assignments.add(assignment);
+                        }
+                    } else {
+                        isAssigned = true;
+                        assignments.add(assignment);
+                    }
+                }
+            }
+        } else {
+            // Check legacy fields
+            boolean emailOrIdMatch = false;
+            if (submission.getForwardedToAuditorId() != null && submission.getForwardedToAuditorId().equals(caller.getId())) {
+                emailOrIdMatch = true;
+            } else if (caller.getEmail() != null && caller.getEmail().equalsIgnoreCase(submission.getForwardedToAuditorEmail())) {
+                emailOrIdMatch = true;
+            } else {
+                String idsStr = submission.getForwardedToAuditorIds();
+                if (idsStr != null && !idsStr.isBlank()) {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        java.util.List<?> list = mapper.readValue(idsStr, java.util.List.class);
+                        if (list != null) {
+                            for (Object obj : list) {
+                                if (obj != null && obj.toString().equals(caller.getId().toString())) {
+                                    emailOrIdMatch = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (!emailOrIdMatch) {
+                    String emailsStr = submission.getForwardedToAuditorEmails();
+                    if (emailsStr != null && !emailsStr.isBlank() && caller.getEmail() != null) {
+                        try {
+                            ObjectMapper mapper = new ObjectMapper();
+                            java.util.List<?> list = mapper.readValue(emailsStr, java.util.List.class);
+                            if (list != null) {
+                                for (Object obj : list) {
+                                    if (obj != null && caller.getEmail().equalsIgnoreCase(obj.toString().trim())) {
+                                        emailOrIdMatch = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+            if (emailOrIdMatch) {
+                if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+                    java.util.Set<String> subPosts = resolveSubmissionPostsForList(submission);
+                    java.util.Set<String> overlap = new java.util.HashSet<>(auditorPosts);
+                    overlap.retainAll(subPosts);
+                    if (!overlap.isEmpty()) {
+                        isAssigned = true;
+                    }
+                } else {
+                    isAssigned = true;
+                }
+            }
+        }
+        
+        if (!isAssigned) {
             throw new SecurityException("You are not assigned to review this submission");
         }
         
-        java.util.List<String> postsToSubmit = new java.util.ArrayList<>();
+        // Consolidate postsSubmitted from all possible payload fields
+        java.util.Set<String> postsToSubmit = new java.util.HashSet<>();
         if (request.getPostsSubmitted() != null) {
             for (String p : request.getPostsSubmitted()) {
+                String cp = canonicalAdministrativePost(p);
+                if (cp != null) postsToSubmit.add(cp);
+            }
+        }
+        if (request.getSubmittedPosts() != null) {
+            for (String p : request.getSubmittedPosts()) {
+                String cp = canonicalAdministrativePost(p);
+                if (cp != null) postsToSubmit.add(cp);
+            }
+        }
+        if (request.getAdministrativePosts() != null) {
+            for (String p : request.getAdministrativePosts()) {
+                String cp = canonicalAdministrativePost(p);
+                if (cp != null) postsToSubmit.add(cp);
+            }
+        }
+        if (request.getAssignedPosts() != null) {
+            for (String p : request.getAssignedPosts()) {
+                String cp = canonicalAdministrativePost(p);
+                if (cp != null) postsToSubmit.add(cp);
+            }
+        }
+        if (request.getPosts() != null) {
+            for (String p : request.getPosts()) {
                 String cp = canonicalAdministrativePost(p);
                 if (cp != null) postsToSubmit.add(cp);
             }
@@ -2969,7 +3073,7 @@ public class SubmissionService {
         int pending = total - submitted;
         boolean allSubmitted = (total > 0 && pending == 0);
         
-        if (allSubmitted) {
+        if (allSubmitted || total == 0) {
             submission.setStatus("AUDITOR_COMPLETED");
             submission.setAuditorReviewedBy(caller.getName());
             submission.setAuditorReviewedByEmail(caller.getEmail());

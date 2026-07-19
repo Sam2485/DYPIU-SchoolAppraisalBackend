@@ -784,6 +784,10 @@ public class SubmissionController {
         private String auditorType;
         private String auditCategory;
         private List<String> postsSubmitted;
+        private List<String> submittedPosts;
+        private List<String> administrativePosts;
+        private List<String> assignedPosts;
+        private List<String> posts;
         private List<String> assignmentKeys;
         private String submittedAt;
         private String reviewStatus;

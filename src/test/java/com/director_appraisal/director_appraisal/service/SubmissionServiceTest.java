@@ -918,4 +918,136 @@ class SubmissionServiceTest {
         assertEquals("DRAFT", shared.getStatus());
         assertNull(shared.getSubmittedAt());
     }
+
+    @Test
+    void testAuditorCanSubmitAssignedPosts() {
+        Submission sub = Submission.builder()
+                .id(72L)
+                .auditType("administrative")
+                .status("UNDER_REVIEW")
+                .forwardedAuditorType("internal")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User auditor = User.builder()
+                .id(201L)
+                .email("ia1@dypiu.ac.in")
+                .name("IA1")
+                .role("auditor")
+                .post("registrar")
+                .build();
+                
+        SubmissionAuditorAssignment assignment = SubmissionAuditorAssignment.builder()
+                .id(1L)
+                .submissionId(72L)
+                .auditorId(201L)
+                .auditorName("IA1")
+                .auditorEmail("ia1@dypiu.ac.in")
+                .auditorType("internal")
+                .post("registrar")
+                .status("PENDING")
+                .build();
+
+        com.director_appraisal.director_appraisal.controller.SubmissionController.AuditorSubmitRequest req = 
+                new com.director_appraisal.director_appraisal.controller.SubmissionController.AuditorSubmitRequest();
+        req.setPostsSubmitted(List.of("registrar"));
+        req.setValuesData("{}");
+
+        when(submissionRepository.findByIdForUpdate(72L)).thenReturn(Optional.of(sub));
+        when(auditorAssignmentRepository.findBySubmissionId(72L)).thenReturn(List.of(assignment));
+        when(auditorAssignmentRepository.findBySubmissionIdAndAuditorType(72L, "internal")).thenReturn(List.of(assignment));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(i -> i.getArgument(0));
+
+        java.util.Map<String, Object> res = submissionService.submitAuditorReview(72L, auditor, req);
+        assertEquals("SUBMITTED", assignment.getStatus());
+        assertEquals("AUDITOR_COMPLETED", sub.getStatus());
+    }
+
+    @Test
+    void testAuditorNotAssignedPostRejected() {
+        Submission sub = Submission.builder()
+                .id(72L)
+                .auditType("administrative")
+                .status("UNDER_REVIEW")
+                .forwardedAuditorType("internal")
+                .valuesData("{}")
+                .build();
+        User auditor = User.builder()
+                .id(201L)
+                .email("ia1@dypiu.ac.in")
+                .role("auditor")
+                .post("hr")
+                .build();
+                
+        SubmissionAuditorAssignment assignment = SubmissionAuditorAssignment.builder()
+                .id(1L)
+                .submissionId(72L)
+                .auditorId(201L)
+                .auditorEmail("ia1@dypiu.ac.in")
+                .post("registrar")
+                .status("PENDING")
+                .build();
+
+        com.director_appraisal.director_appraisal.controller.SubmissionController.AuditorSubmitRequest req = 
+                new com.director_appraisal.director_appraisal.controller.SubmissionController.AuditorSubmitRequest();
+        req.setPostsSubmitted(List.of("hr"));
+
+        when(submissionRepository.findByIdForUpdate(72L)).thenReturn(Optional.of(sub));
+        when(auditorAssignmentRepository.findBySubmissionId(72L)).thenReturn(List.of(assignment));
+
+        assertThrows(SecurityException.class, () -> submissionService.submitAuditorReview(72L, auditor, req));
+    }
+
+    @Test
+    void testSubmissionCompletedOnlyAfterAllAssignmentsSubmitted() {
+        Submission sub = Submission.builder()
+                .id(72L)
+                .auditType("administrative")
+                .status("UNDER_REVIEW")
+                .forwardedAuditorType("internal")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User auditor1 = User.builder()
+                .id(201L)
+                .email("ia1@dypiu.ac.in")
+                .role("auditor")
+                .post("registrar")
+                .build();
+                
+        SubmissionAuditorAssignment assignment1 = SubmissionAuditorAssignment.builder()
+                .id(1L)
+                .submissionId(72L)
+                .auditorId(201L)
+                .auditorEmail("ia1@dypiu.ac.in")
+                .post("registrar")
+                .status("PENDING")
+                .build();
+
+        SubmissionAuditorAssignment assignment2 = SubmissionAuditorAssignment.builder()
+                .id(2L)
+                .submissionId(72L)
+                .auditorId(202L)
+                .auditorEmail("ia2@dypiu.ac.in")
+                .post("hr")
+                .status("PENDING")
+                .build();
+
+        com.director_appraisal.director_appraisal.controller.SubmissionController.AuditorSubmitRequest req = 
+                new com.director_appraisal.director_appraisal.controller.SubmissionController.AuditorSubmitRequest();
+        req.setPostsSubmitted(List.of("registrar"));
+        req.setValuesData("{}");
+
+        when(submissionRepository.findByIdForUpdate(72L)).thenReturn(Optional.of(sub));
+        when(auditorAssignmentRepository.findBySubmissionId(72L)).thenReturn(List.of(assignment1, assignment2));
+        when(auditorAssignmentRepository.findBySubmissionIdAndAuditorType(72L, "internal")).thenReturn(List.of(assignment1, assignment2));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(i -> i.getArgument(0));
+
+        submissionService.submitAuditorReview(72L, auditor1, req);
+        assertEquals("SUBMITTED", assignment1.getStatus());
+        assertEquals("PENDING", assignment2.getStatus());
+        assertEquals("UNDER_REVIEW", sub.getStatus());
+    }
 }
