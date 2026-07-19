@@ -2957,6 +2957,13 @@ public class SubmissionService {
         java.util.Set<String> auditorPosts = resolveAdministrativePosts(caller);
         List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
         
+        System.out.println("[AUDIT_DEBUG] Caller: id=" + caller.getId() + ", email=" + caller.getEmail() + ", name=" + caller.getName());
+        System.out.println("[AUDIT_DEBUG] Resolved auditorPosts: " + auditorPosts);
+        System.out.println("[AUDIT_DEBUG] Total assignments in DB for submission " + submissionId + ": " + allAssignments.size());
+        for (SubmissionAuditorAssignment a : allAssignments) {
+            System.out.println("[AUDIT_DEBUG] Assignment: id=" + a.getId() + ", auditorId=" + a.getAuditorId() + ", email=" + a.getAuditorEmail() + ", post=" + a.getPost() + ", status=" + a.getStatus());
+        }
+
         boolean isAssigned = false;
         List<SubmissionAuditorAssignment> assignments = new java.util.ArrayList<>();
         
@@ -2965,9 +2972,12 @@ public class SubmissionService {
                     .filter(a -> caller.getId().equals(a.getAuditorId()) || (caller.getEmail() != null && caller.getEmail().equalsIgnoreCase(a.getAuditorEmail())))
                     .toList();
                     
+            System.out.println("[AUDIT_DEBUG] callerAssignments matched count: " + callerAssignments.size());
             if (!callerAssignments.isEmpty()) {
                 for (SubmissionAuditorAssignment assignment : callerAssignments) {
                     String canonicalPost = canonicalAdministrativePost(assignment.getPost());
+                    boolean hasOverlap = canonicalPost != null && auditorPosts.contains(canonicalPost);
+                    System.out.println("[AUDIT_DEBUG] Checking assignment: id=" + assignment.getId() + ", post=" + assignment.getPost() + ", canonicalPost=" + canonicalPost + ", hasOverlap=" + hasOverlap);
                     if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
                         if (canonicalPost != null && auditorPosts.contains(canonicalPost)) {
                             isAssigned = true;
