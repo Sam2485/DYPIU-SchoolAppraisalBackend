@@ -13,7 +13,7 @@ ALTER TABLE public.submission_auditor_assignments ADD COLUMN IF NOT EXISTS attac
 CREATE UNIQUE INDEX IF NOT EXISTS uk_submission_auditor_assignment_post
     ON public.submission_auditor_assignments(submission_id, auditor_id, auditor_type, COALESCE(post, ''));
 
--- 4. Add auditor correction fields to public.submissions
+-- 4. Add auditor correction and review fields to public.submissions
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS auditor_correction_requested BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS correction_requested_for_auditor BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS requires_auditor_resubmission BOOLEAN DEFAULT FALSE;
@@ -22,8 +22,9 @@ ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS auditor_correction_reque
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS auditor_correction_requested_by_role VARCHAR(100);
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS auditor_correction_requested_on TIMESTAMP;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS auditor_resubmitted_at TIMESTAMP;
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS auditor_reviewed_by_email VARCHAR(255);
 
--- 5. Add same auditor correction fields to public.snapshots (since snapshots mirror submissions)
+-- 5. Add same auditor correction and review fields to public.snapshots (since snapshots mirror submissions)
 ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS auditor_correction_requested BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS correction_requested_for_auditor BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS requires_auditor_resubmission BOOLEAN DEFAULT FALSE;
@@ -32,3 +33,9 @@ ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS auditor_correction_request
 ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS auditor_correction_requested_by_role VARCHAR(100);
 ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS auditor_correction_requested_on TIMESTAMP;
 ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS auditor_resubmitted_at TIMESTAMP;
+ALTER TABLE public.snapshots ADD COLUMN IF NOT EXISTS auditor_reviewed_by_email VARCHAR(255);
+
+-- 6. Add soft-delete fields to users
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(255);

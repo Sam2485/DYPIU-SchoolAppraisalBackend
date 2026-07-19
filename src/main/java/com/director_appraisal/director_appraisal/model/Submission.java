@@ -67,6 +67,7 @@ public class Submission {
     private String auditorReviewedBy;
     private String auditorReviewedByDesignation;
     private String auditorReviewedByRole;
+    private String auditorReviewedByEmail;
     private LocalDateTime auditorReviewedOn;
 
     private Long rootSubmissionId;

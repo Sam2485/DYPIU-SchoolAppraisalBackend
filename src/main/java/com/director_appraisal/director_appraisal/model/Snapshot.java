@@ -60,6 +60,7 @@ public class Snapshot {
     private String auditorCorrectionRequestedByRole;
     private LocalDateTime auditorCorrectionRequestedOn;
     private LocalDateTime auditorResubmittedAt;
+    private String auditorReviewedByEmail;
 
     public String getValuesData() {
         return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(valuesData);

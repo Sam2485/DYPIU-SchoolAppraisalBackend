@@ -64,6 +64,7 @@ public class UserService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         return userRepository.findByEmail(username)
+                .filter(u -> !Boolean.TRUE.equals(u.getDeleted()))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
     }
 
@@ -72,7 +73,9 @@ public class UserService implements UserDetailsService {
     }
 
     public List<User> findAllUsers() {
-        return userRepository.findAll();
+        return userRepository.findAll().stream()
+                .filter(u -> !Boolean.TRUE.equals(u.getDeleted()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public Optional<User> findById(Long id) {
@@ -97,17 +100,23 @@ public class UserService implements UserDetailsService {
         // Remove administrative contributions
         submissionService.removeAdministrativeUserContribution(user);
 
-        // Delete academic/owned submissions and their associated attachments
-        submissionService.deleteUserSubmissionsAndAttachments(user);
+        user.setDeleted(true);
+        user.setDeletedAt(java.time.LocalDateTime.now());
+        
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                user.setDeletedBy(auth.getName());
+            }
+        } catch (Exception ignored) {}
 
         if (user.getId() != null) {
-            submissionService.handleAuditorDeletionCleanup(user.getId());
             userAdministrativePostRepository.deleteByUserId(user.getId());
         }
         if (user.getEmail() != null && !user.getEmail().isBlank()) {
             resetTokenRepository.deleteByEmail(user.getEmail().trim().toLowerCase());
         }
-        userRepository.delete(user);
+        userRepository.save(user);
     }
 
     @Transactional

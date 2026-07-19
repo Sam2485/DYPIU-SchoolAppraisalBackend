@@ -44,6 +44,13 @@ public class User implements UserDetails {
     @Builder.Default
     private String status = "active";
 
+    @Builder.Default
+    private Boolean deleted = false;
+
+    private java.time.LocalDateTime deletedAt;
+
+    private String deletedBy;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()));

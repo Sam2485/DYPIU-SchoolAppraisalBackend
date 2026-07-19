@@ -695,6 +695,7 @@ public class SubmissionService {
                 .auditorCorrectionRequestedByRole(submission.getAuditorCorrectionRequestedByRole())
                 .auditorCorrectionRequestedOn(submission.getAuditorCorrectionRequestedOn())
                 .auditorResubmittedAt(submission.getAuditorResubmittedAt())
+                .auditorReviewedByEmail(submission.getAuditorReviewedByEmail())
                 .build();
          snapshotRepository.save(snapshot);
     }
@@ -799,7 +800,9 @@ public class SubmissionService {
         }
         final String forwardingAuditType = auditType;
 
-        List<User> allAuditors = userRepository.findByAccountType("auditor");
+        List<User> allAuditors = userRepository.findByAccountType("auditor").stream()
+                .filter(u -> !Boolean.TRUE.equals(u.getDeleted()))
+                .toList();
         
         List<User> matchedAuditors = allAuditors.stream()
                 .filter(auditor -> {
@@ -918,14 +921,15 @@ public class SubmissionService {
 
     public List<Submission> getAllSubmissionsForUser(User user) {
         String role = user.getRole().toLowerCase();
+        List<Submission> list;
 
         if ("iqac".equals(role)) {
-            return submissionRepository.findByStatusIn(IQAC_VISIBLE_STATUSES);
+            list = submissionRepository.findByStatusIn(IQAC_VISIBLE_STATUSES);
         } else if ("vice-chancellor".equals(role)) {
-            return submissionRepository.findByStatusIn(VC_VISIBLE_STATUSES);
+            list = submissionRepository.findByStatusIn(VC_VISIBLE_STATUSES);
         } else if (role.contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType())) {
             List<Submission> allSubmissions = submissionRepository.findAll();
-            return allSubmissions.stream()
+            list = allSubmissions.stream()
                     .filter(sub -> {
                         boolean matchesStatus = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED").contains(sub.getStatus().toUpperCase());
                         if (!matchesStatus) {
@@ -935,8 +939,25 @@ public class SubmissionService {
                     })
                     .toList();
         } else {
-            return List.of();
+            list = List.of();
         }
+
+        // Exclude active submissions where the submitting user is soft-deleted/inactive
+        return list.stream()
+                .filter(sub -> {
+                    if ("APPROVED".equalsIgnoreCase(sub.getStatus()) || "FINAL".equalsIgnoreCase(sub.getStatus())) {
+                        return true;
+                    }
+                    if (sub.getEmail() != null) {
+                        Optional<User> submitter = userRepository.findByEmail(sub.getEmail().trim().toLowerCase());
+                        if (submitter.isPresent() && Boolean.TRUE.equals(submitter.get().getDeleted())) {
+                            return false;
+                        }
+                    }
+                    return true;
+                })
+                .peek(this::populateAuditorProgressAndAssignments)
+                .toList();
     }
 
     public List<Submission> getPreviousReports(User user, String academicYear) {
@@ -1060,6 +1081,7 @@ public class SubmissionService {
                 }
                 submission.setStatus("AUDITOR_COMPLETED");
                 submission.setAuditorReviewedBy(caller.getName());
+                submission.setAuditorReviewedByEmail(caller.getEmail());
                 submission.setAuditorReviewedByDesignation(caller.getDesignation());
                 submission.setAuditorReviewedByRole(caller.getRole());
                 submission.setAuditorReviewedOn(LocalDateTime.now());
@@ -1080,6 +1102,26 @@ public class SubmissionService {
                 }
                 if (isIqac) {
                     if (isCorrectionReturn) {
+                        boolean auditorDeleted = false;
+                        if (submission.getForwardedToAuditorId() != null) {
+                            Optional<User> audOpt = userRepository.findById(submission.getForwardedToAuditorId());
+                            if (audOpt.isPresent() && Boolean.TRUE.equals(audOpt.get().getDeleted())) {
+                                auditorDeleted = true;
+                            }
+                        } else {
+                            List<SubmissionAuditorAssignment> assignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+                            for (SubmissionAuditorAssignment ass : assignments) {
+                                Optional<User> audOpt = userRepository.findById(ass.getAuditorId());
+                                if (audOpt.isPresent() && Boolean.TRUE.equals(audOpt.get().getDeleted())) {
+                                    auditorDeleted = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (auditorDeleted) {
+                            throw new IllegalStateException("Assigned auditor account is inactive/deleted. Please assign another auditor before returning for correction.");
+                        }
+
                         submission.setAuditorCorrectionRequested(true);
                         submission.setCorrectionRequestedForAuditor(true);
                         submission.setRequiresAuditorResubmission(true);
@@ -2930,6 +2972,7 @@ public class SubmissionService {
         if (allSubmitted) {
             submission.setStatus("AUDITOR_COMPLETED");
             submission.setAuditorReviewedBy(caller.getName());
+            submission.setAuditorReviewedByEmail(caller.getEmail());
             submission.setAuditorReviewedByDesignation(caller.getDesignation());
             submission.setAuditorReviewedByRole(caller.getRole());
             submission.setAuditorReviewedOn(submittedAt);
