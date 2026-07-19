@@ -3118,7 +3118,7 @@ public class SubmissionService {
             }
         }
         
-        List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorType(submissionId, submission.getForwardedAuditorType());
+        allAssignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorType(submissionId, submission.getForwardedAuditorType());
         if (allAssignments.isEmpty()) {
             allAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
         }
