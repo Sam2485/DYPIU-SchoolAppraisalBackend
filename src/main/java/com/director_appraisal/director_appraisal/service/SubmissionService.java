@@ -3273,22 +3273,40 @@ public class SubmissionService {
     public void populateAuditorProgressAndAssignments(Submission submission) {
         if (submission == null || submission.getId() == null) return;
         
-        List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+        List<SubmissionAuditorAssignment> currentAssignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+        List<SubmissionAuditorAssignment> allAssignments = new java.util.ArrayList<>(currentAssignments);
+        
+        java.util.Set<Long> loadedSubmissionIds = new java.util.HashSet<>();
+        loadedSubmissionIds.add(submission.getId());
+        
+        Long currentParentId = submission.getParentSubmissionId();
+        while (currentParentId != null && !loadedSubmissionIds.contains(currentParentId)) {
+            loadedSubmissionIds.add(currentParentId);
+            allAssignments.addAll(auditorAssignmentRepository.findBySubmissionId(currentParentId));
+            Optional<Submission> parentSub = submissionRepository.findById(currentParentId);
+            currentParentId = parentSub.map(Submission::getParentSubmissionId).orElse(null);
+        }
+        
+        if (submission.getRootSubmissionId() != null && !loadedSubmissionIds.contains(submission.getRootSubmissionId())) {
+            allAssignments.addAll(auditorAssignmentRepository.findBySubmissionId(submission.getRootSubmissionId()));
+        }
         
         ObjectMapper mapper = new ObjectMapper();
         java.util.List<java.util.Map<String, Object>> assignmentsList = new java.util.ArrayList<>();
-        int total = allAssignments.size();
+        int total = currentAssignments.size();
         int submitted = 0;
         
         java.util.Map<String, java.util.Map<String, Object>> byPostMap = new java.util.LinkedHashMap<>();
         
         for (SubmissionAuditorAssignment assignment : allAssignments) {
             boolean isSub = "SUBMITTED".equalsIgnoreCase(assignment.getStatus());
-            if (isSub) submitted++;
+            if (assignment.getSubmissionId().equals(submission.getId()) && isSub) {
+                submitted++;
+            }
             
             java.util.Map<String, Object> assMap = new java.util.HashMap<>();
             String postKey = assignment.getPost() != null ? assignment.getPost() : "academic";
-            assMap.put("key", submission.getId() + "-" + assignment.getAuditorId() + "-" + postKey);
+            assMap.put("key", assignment.getSubmissionId() + "-" + assignment.getAuditorId() + "-" + postKey);
             assMap.put("auditorId", assignment.getAuditorId());
             assMap.put("auditorName", assignment.getAuditorName());
             assMap.put("auditorEmail", assignment.getAuditorEmail());
@@ -3310,7 +3328,7 @@ public class SubmissionService {
             }
             assignmentsList.add(assMap);
             
-            if ("administrative".equalsIgnoreCase(submission.getAuditType()) && assignment.getPost() != null) {
+            if ("administrative".equalsIgnoreCase(submission.getAuditType()) && assignment.getPost() != null && assignment.getSubmissionId().equals(submission.getId())) {
                 String p = assignment.getPost();
                 java.util.Map<String, Object> postStat = byPostMap.get(p);
                 if (postStat == null) {
