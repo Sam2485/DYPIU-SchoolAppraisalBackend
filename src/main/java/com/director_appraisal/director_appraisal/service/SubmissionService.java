@@ -176,6 +176,9 @@ public class SubmissionService {
 
             boolean allSubmitted = ADMIN_POSTS.stream()
                     .allMatch(requiredPost -> {
+                        if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
+                            return true;
+                        }
                         String st = progress.path(requiredPost).asText("DRAFT");
                         return "SUBMITTED".equalsIgnoreCase(st) || "APPROVED".equalsIgnoreCase(st);
                     });
@@ -261,6 +264,9 @@ public class SubmissionService {
 
                 boolean allSubmitted = ADMIN_POSTS.stream()
                         .allMatch(requiredPost -> {
+                            if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
+                                return true;
+                            }
                             String status = values.path("administrativeProgress").path(requiredPost).asText("DRAFT");
                             return "SUBMITTED".equalsIgnoreCase(status) || "APPROVED".equalsIgnoreCase(status);
                         });
@@ -407,6 +413,9 @@ public class SubmissionService {
 
             boolean allApproved = ADMIN_POSTS.stream()
                     .allMatch(post -> {
+                        if (!isPostRequiredForAdministrativeWorkflow(post)) {
+                            return true;
+                        }
                         String st = mergedProgress.path(post).asText("DRAFT");
                         return "APPROVED".equalsIgnoreCase(st) || "SUBMITTED".equalsIgnoreCase(st);
                     });
@@ -1357,6 +1366,9 @@ public class SubmissionService {
                 com.fasterxml.jackson.databind.JsonNode progress = valuesNode.get("administrativeProgress");
                 boolean allSubmitted = ADMIN_POSTS.stream()
                         .allMatch(post -> {
+                            if (!isPostRequiredForAdministrativeWorkflow(post)) {
+                                return true;
+                            }
                             if (progress == null || !progress.isObject()) {
                                 return false;
                             }
@@ -1780,7 +1792,13 @@ public class SubmissionService {
             }
             mergedValues.set("administrativeProgress", progress);
             boolean allSubmitted = ADMIN_POSTS.stream()
-                    .allMatch(requiredPost -> "SUBMITTED".equalsIgnoreCase(progress.path(requiredPost).asText("DRAFT")));
+                    .allMatch(requiredPost -> {
+                        if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
+                            return true;
+                        }
+                        String status = progress.path(requiredPost).asText("DRAFT");
+                        return "SUBMITTED".equalsIgnoreCase(status) || "APPROVED".equalsIgnoreCase(status);
+                    });
 
             String mergedValuesJson = mapper.writeValueAsString(mergedValues);
             String mergedTablesJson = mapper.writeValueAsString(mergedTables);
@@ -2015,6 +2033,40 @@ public class SubmissionService {
                     .forEach(posts::add);
         }
         return posts;
+    }
+
+    private boolean hasActiveAdministrativeUserForPost(String post) {
+        if (post == null || post.isBlank()) return false;
+        String canonicalPost = canonicalAdministrativePost(post);
+        if (canonicalPost == null) return false;
+        
+        List<User> allUsers = userRepository.findAll();
+        for (User u : allUsers) {
+            if (u.getDeleted() != null && u.getDeleted()) {
+                continue;
+            }
+            if (!"administrative".equalsIgnoreCase(u.getRole())) {
+                continue;
+            }
+            String up = canonicalAdministrativePost(u.getPost());
+            if (canonicalPost.equalsIgnoreCase(up)) {
+                return true;
+            }
+            if (u.getId() != null) {
+                List<UserAdministrativePost> ups = userAdministrativePostRepository.findByUserId(u.getId());
+                for (UserAdministrativePost userPost : ups) {
+                    String uPostCanonical = canonicalAdministrativePost(userPost.getPost());
+                    if (canonicalPost.equalsIgnoreCase(uPostCanonical)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isPostRequiredForAdministrativeWorkflow(String post) {
+        return hasActiveAdministrativeUserForPost(post);
     }
 
     private void removeAdministrativeOwnedFields(com.fasterxml.jackson.databind.node.ObjectNode node,
@@ -2711,6 +2763,9 @@ public class SubmissionService {
             java.util.Map<String, String> progress = submission.getAdministrativeProgressForJson();
             allContributorsSubmitted = ADMIN_POSTS.stream()
                     .allMatch(post -> {
+                        if (!isPostRequiredForAdministrativeWorkflow(post)) {
+                            return true;
+                        }
                         String st = progress.get(post);
                         return "APPROVED".equalsIgnoreCase(st) || "SUBMITTED".equalsIgnoreCase(st);
                     });
