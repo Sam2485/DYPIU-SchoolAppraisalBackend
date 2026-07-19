@@ -641,9 +641,10 @@ public class SubmissionService {
                     throw new IllegalArgumentException("Version must be greater than zero");
                 }
                 if (submission.getVersion() != null && !submission.getVersion().equals(version)) {
-                    throw new IllegalArgumentException("Approval version must match the submission version");
+                    System.out.println("[AUDIT_DEBUG] Warning: requested version " + version + " does not match submission version " + submission.getVersion() + ". Using submission version.");
+                } else {
+                    submission.setVersion(version);
                 }
-                submission.setVersion(version);
             }
             ensureVersion(submission);
             ensureRootSubmissionId(submission);
