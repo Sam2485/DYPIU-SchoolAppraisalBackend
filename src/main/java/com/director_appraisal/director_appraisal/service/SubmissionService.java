@@ -802,11 +802,7 @@ public class SubmissionService {
     }
 
     public boolean isAuditorFallbackMatch(User auditor, Submission submission) {
-        if (submission.getId() != null && auditorAssignmentRepository.existsBySubmissionId(submission.getId())) {
-            return false;
-        }
-
-        boolean statusMatch = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED").contains(submission.getStatus().toUpperCase());
+        boolean statusMatch = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "FORWARDED_TO_INTERNAL_AUDITOR", "FORWARDED_TO_EXTERNAL_AUDITOR").contains(submission.getStatus().toUpperCase());
         if (!statusMatch) {
             return false;
         }
@@ -1503,8 +1499,9 @@ public class SubmissionService {
         if (submission.getId() == null) {
             throw new IllegalStateException("Submission must be saved before auditor assignment");
         }
-        if (submission.getForwardedAt() != null || auditorAssignmentRepository.existsBySubmissionId(submission.getId())) {
-            throw new ConflictException("Submission has already been forwarded to auditor");
+        if (auditorAssignmentRepository.existsBySubmissionId(submission.getId())) {
+            auditorAssignmentRepository.deleteBySubmissionId(submission.getId());
+            auditorAssignmentRepository.flush();
         }
         if (selectedAuditorIds == null || selectedAuditorIds.isEmpty()) {
             throw new IllegalArgumentException("At least one auditor must be selected");
