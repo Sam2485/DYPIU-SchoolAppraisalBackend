@@ -144,7 +144,10 @@ public class SubmissionService {
             progress.put(post, "SUBMITTED");
             valuesNode.set("administrativeProgress", progress);
 
-            com.fasterxml.jackson.databind.node.ObjectNode statusNode = objectNodeOrEmpty(mapper, valuesNode.get("__administrativeSubmissionStatus"));
+            com.fasterxml.jackson.databind.JsonNode existingStatusNode = valuesNode.get("__administrativeSubmissionStatus");
+            com.fasterxml.jackson.databind.node.ObjectNode statusNode = (existingStatusNode != null && existingStatusNode.isObject())
+                    ? (com.fasterxml.jackson.databind.node.ObjectNode) existingStatusNode
+                    : mapper.createObjectNode();
             com.fasterxml.jackson.databind.node.ObjectNode postStatus = mapper.createObjectNode();
             postStatus.put("submitted", true);
             postStatus.put("submittedAt", LocalDateTime.now().toString());
