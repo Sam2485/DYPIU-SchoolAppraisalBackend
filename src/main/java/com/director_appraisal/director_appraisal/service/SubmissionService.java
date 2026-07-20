@@ -946,15 +946,22 @@ public class SubmissionService {
     public List<Submission> getAllSubmissionsForUser(User user) {
         String role = user.getRole().toLowerCase();
 
+        List<Submission> allInDb = submissionRepository.findAll();
+        System.out.println("[AUDIT_DEBUG] getAllSubmissionsForUser: user=" + user.getEmail() + ", role=" + role + ", totalInDb=" + allInDb.size());
+        for (Submission s : allInDb) {
+            System.out.println("[AUDIT_DEBUG]   Sub in DB: id=" + s.getId() + ", auditType=" + s.getAuditType() + ", status=" + s.getStatus() + ", email=" + s.getEmail());
+        }
+
         // Auto-sync administrative draft submission statuses if all active posts submitted
         try {
-            List<Submission> draftAdminForms = submissionRepository.findAll().stream()
+            List<Submission> draftAdminForms = allInDb.stream()
                     .filter(sub -> "administrative".equalsIgnoreCase(sub.getAuditType()) && "DRAFT".equalsIgnoreCase(sub.getStatus()))
                     .toList();
             for (Submission draftAdmin : draftAdminForms) {
                 ObjectMapper mapper = new ObjectMapper();
                 com.fasterxml.jackson.databind.node.ObjectNode values = objectNodeOrEmpty(mapper, draftAdmin.getValuesData());
                 com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, values);
+                System.out.println("[AUDIT_DEBUG]   draftAdmin id=" + draftAdmin.getId() + " progressNode: " + progress.toString());
                 boolean allSubmitted = ADMIN_POSTS.stream()
                         .allMatch(requiredPost -> {
                             if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
@@ -963,6 +970,7 @@ public class SubmissionService {
                             String st = progress.path(requiredPost).asText("DRAFT");
                             return "SUBMITTED".equalsIgnoreCase(st) || "APPROVED".equalsIgnoreCase(st);
                         });
+                System.out.println("[AUDIT_DEBUG]   draftAdmin id=" + draftAdmin.getId() + " allSubmitted=" + allSubmitted);
                 if (allSubmitted) {
                     draftAdmin.setStatus("SUBMITTED");
                     if (draftAdmin.getSubmittedAt() == null) {
@@ -971,12 +979,16 @@ public class SubmissionService {
                     submissionRepository.save(draftAdmin);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.out.println("[AUDIT_DEBUG] Error in auto-sync: " + e.getMessage());
+        }
 
         List<Submission> list;
 
         if ("iqac".equals(role)) {
             list = submissionRepository.findByStatusIn(IQAC_VISIBLE_STATUSES);
+            System.out.println("[AUDIT_DEBUG] iqac list count: " + list.size());
+        }
         } else if ("vice-chancellor".equals(role)) {
             list = submissionRepository.findByStatusIn(VC_VISIBLE_STATUSES);
         } else if (role.contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType())) {
