@@ -2964,7 +2964,7 @@ public class SubmissionService {
         boolean canForwardToAuditor = false;
         if (isIqac || isVc) {
             String overallStatus = submission.getStatus();
-            if ("SUBMITTED".equalsIgnoreCase(overallStatus)) {
+            if (List.of("SUBMITTED", "UNDER_REVIEW", "FORWARDED_TO_INTERNAL_AUDITOR", "FORWARDED_TO_EXTERNAL_AUDITOR").contains(overallStatus != null ? overallStatus.toUpperCase() : "")) {
                 canForwardToAuditor = true;
             }
         }
