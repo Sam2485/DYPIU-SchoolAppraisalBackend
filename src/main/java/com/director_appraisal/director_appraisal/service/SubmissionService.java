@@ -31,8 +31,8 @@ public class SubmissionService {
     private static final String STATUS_FINAL = "FINAL";
     private static final List<String> LOCKED_STATUSES = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> REVIEWER_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", STATUS_APPROVED_LEGACY, STATUS_FINAL);
-    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
-    private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "FORWARDED_TO_INTERNAL_AUDITOR", "INTERNAL_AUDITOR_COMPLETED", "FORWARDED_TO_EXTERNAL_AUDITOR", "AUDITOR_COMPLETED", "EXTERNAL_AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", "EXTERNAL_AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED", "SENT_BACK");
     private static final List<String> ADMIN_POSTS = List.of("registrar", "hr", "dean-student-welfare", "dean-placement");
@@ -199,6 +199,9 @@ public class SubmissionService {
             if (allSubmitted) {
                 lockedSubmission.setStatus("SUBMITTED");
                 lockedSubmission.setSubmittedAt(LocalDateTime.now());
+                if ("EXTERNAL".equalsIgnoreCase(lockedSubmission.getReportCategory()) || "external".equalsIgnoreCase(lockedSubmission.getForwardedAuditorType()) || (lockedSubmission.getVersion() != null && lockedSubmission.getVersion() > 1)) {
+                    autoForwardToExternalAuditors(lockedSubmission);
+                }
             }
 
             Submission saved = submissionRepository.save(lockedSubmission);
@@ -633,7 +636,9 @@ public class SubmissionService {
         }
 
         if (List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL).contains(requestedStatus)) {
-            if (!"AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())) {
+            if (!"AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())
+                    && !"EXTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())
+                    && !"INTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())) {
                 throw new IllegalStateException("Form can only be approved after the audit has been completed by an auditor");
             }
         }
@@ -1277,8 +1282,86 @@ public class SubmissionService {
         ensureVersion(submission);
 
         Submission saved = submissionRepository.save(submission);
+        if ("SUBMITTED".equalsIgnoreCase(saved.getStatus()) && ("EXTERNAL".equalsIgnoreCase(saved.getReportCategory()) || "external".equalsIgnoreCase(saved.getForwardedAuditorType()) || (saved.getVersion() != null && saved.getVersion() > 1))) {
+            autoForwardToExternalAuditors(saved);
+        }
         persistDataForStatus(saved);
         return saved;
+    }
+
+    @Transactional
+    public void autoForwardToExternalAuditors(Submission submission) {
+        if (submission == null) return;
+        
+        List<User> externalAuditors = userRepository.findAll().stream()
+                .filter(u -> !Boolean.TRUE.equals(u.getDeleted()))
+                .filter(u -> {
+                    String role = u.getRole() != null ? u.getRole().toLowerCase() : "";
+                    String type = u.getAuditorType() != null ? u.getAuditorType().toLowerCase() : "";
+                    String acct = u.getAccountType() != null ? u.getAccountType().toLowerCase() : "";
+                    return role.contains("external") || "external".equalsIgnoreCase(type);
+                })
+                .toList();
+
+        if ("academic".equalsIgnoreCase(submission.getAuditType())) {
+            String school = submission.getSchool();
+            if (school != null && !school.isBlank()) {
+                externalAuditors = externalAuditors.stream()
+                        .filter(u -> school.equalsIgnoreCase(u.getSchool()))
+                        .toList();
+            }
+        }
+
+        if (externalAuditors.isEmpty()) {
+            return;
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        List<Long> ids = new java.util.ArrayList<>();
+        List<String> names = new java.util.ArrayList<>();
+        List<String> emails = new java.util.ArrayList<>();
+        List<String> posts = new java.util.ArrayList<>();
+
+        for (User auditor : externalAuditors) {
+            ids.add(auditor.getId());
+            names.add(auditor.getName());
+            emails.add(auditor.getEmail());
+            
+            String post = "academic".equalsIgnoreCase(submission.getAuditType()) ? auditor.getSchool() : auditor.getPost();
+            if (post != null) posts.add(post);
+
+            Optional<SubmissionAuditorAssignment> existingAssignment = auditorAssignmentRepository
+                    .findBySubmissionIdAndAuditorIdAndAuditorType(submission.getId(), auditor.getId(), "external");
+            if (existingAssignment.isEmpty()) {
+                SubmissionAuditorAssignment assignment = SubmissionAuditorAssignment.builder()
+                        .submissionId(submission.getId())
+                        .auditorId(auditor.getId())
+                        .auditorName(auditor.getName())
+                        .auditorEmail(auditor.getEmail())
+                        .auditorType("external")
+                        .auditCategory(submission.getAuditType())
+                        .post(post)
+                        .school(auditor.getSchool())
+                        .status("PENDING")
+                        .assignedAt(LocalDateTime.now())
+                        .build();
+                auditorAssignmentRepository.save(assignment);
+            }
+        }
+
+        try {
+            submission.setForwardedToAuditorIds(mapper.writeValueAsString(ids));
+            submission.setForwardedToAuditorNames(mapper.writeValueAsString(names));
+            submission.setForwardedToAuditorEmails(mapper.writeValueAsString(emails));
+            if (!posts.isEmpty()) {
+                submission.setForwardedToAuditorPosts(mapper.writeValueAsString(posts));
+            }
+        } catch (Exception ignored) {}
+
+        submission.setForwardedAuditorType("external");
+        submission.setStatus("FORWARDED_TO_EXTERNAL_AUDITOR");
+        submission.setForwardedToAuditorAt(LocalDateTime.now());
+        submissionRepository.save(submission);
     }
 
     @Transactional
