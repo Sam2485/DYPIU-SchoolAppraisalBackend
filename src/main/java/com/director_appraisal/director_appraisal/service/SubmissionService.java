@@ -948,7 +948,7 @@ public class SubmissionService {
 
         // Auto-sync administrative draft submission statuses if all active posts submitted
         try {
-            List<Submission> draftAdminForms = submissionRepository.findAllByEmailIgnoreCase(SHARED_ADMINISTRATIVE_EMAIL).stream()
+            List<Submission> draftAdminForms = submissionRepository.findAll().stream()
                     .filter(sub -> "administrative".equalsIgnoreCase(sub.getAuditType()) && "DRAFT".equalsIgnoreCase(sub.getStatus()))
                     .toList();
             for (Submission draftAdmin : draftAdminForms) {
@@ -998,6 +998,9 @@ public class SubmissionService {
         return list.stream()
                 .filter(sub -> {
                     if ("APPROVED".equalsIgnoreCase(sub.getStatus()) || "FINAL".equalsIgnoreCase(sub.getStatus())) {
+                        return true;
+                    }
+                    if ("administrative".equalsIgnoreCase(sub.getAuditType()) || SHARED_ADMINISTRATIVE_EMAIL.equalsIgnoreCase(sub.getEmail())) {
                         return true;
                     }
                     if (sub.getEmail() != null) {
