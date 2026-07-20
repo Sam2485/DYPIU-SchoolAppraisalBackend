@@ -6,7 +6,7 @@ server:
 
 spring:
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:gcp}
+    active: ${SPRING_PROFILES_ACTIVE:default}
   application:
     name: director-appraisal
   
@@ -58,10 +58,6 @@ app:
   jwt:
     secret: ${JWT_SECRET:${JWT_SECRET_KEY:SecretKeyForJWTAppraisalMustBeAtLeast256BitsLongForHMACSHA256}}
     expiration-ms: 86400000 # 24 hours
-  gcp:
-    enabled: ${GCP_ENABLED:false}
-    bucket-name: ${GCP_BUCKET_NAME:${GCP_STORAGE_BUCKET:director-appraisal-attachments}}
-    project-id: ${GCP_PROJECT_ID:director-appraisal-project}
   upload:
     local-path: ${LOCAL_STORAGE_DIR:${UPLOAD_LOCAL_PATH:./uploads}}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}

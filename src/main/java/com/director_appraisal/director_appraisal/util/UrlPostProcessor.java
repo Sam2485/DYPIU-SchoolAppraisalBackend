@@ -16,7 +16,7 @@ public class UrlPostProcessor {
     }
 
     public static String process(String json) {
-        if (json == null || json.isBlank() || gcpEnabled) {
+        if (json == null || json.isBlank()) {
             return json;
         }
         

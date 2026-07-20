@@ -29,7 +29,7 @@ public class AttachmentService {
     private final StorageService storageService;
 
     public AttachmentService(
-            @Value("${app.gcp.bucket-name}") String bucketName,
+            @Value("${app.gcp.bucket-name:schoolappraisal-attachments}") String bucketName,
             @Value("${app.upload.local-path}") String localUploadPath,
             StorageService storageService) {
         this.bucketName = bucketName;

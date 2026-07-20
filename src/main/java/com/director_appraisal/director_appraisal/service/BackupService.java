@@ -191,30 +191,16 @@ public class BackupService {
 
         log.info("Starting database backup dump. DB Name: '{}', Host: '{}', Port: '{}'", dbName, host, port);
 
-        ProcessBuilder pb;
-        if (dbUrl.contains("socketFactory")) {
-            log.info("GCP Cloud SQL connection detected. Using socketpg_dump command.");
-            pb = new ProcessBuilder(
-                    "pg_dump",
-                    "-U", dbUsername,
-                    "-F", "p",
-                    "-b",
-                    "-v",
-                    dbName
-            );
-        } else {
-            log.info("Standard TCP database connection detected. Using standard TCP command.");
-            pb = new ProcessBuilder(
-                    "pg_dump",
-                    "-h", host,
-                    "-p", port,
-                    "-U", dbUsername,
-                    "-F", "p",
-                    "-b",
-                    "-v",
-                    dbName
-            );
-        }
+        ProcessBuilder pb = new ProcessBuilder(
+                "pg_dump",
+                "-h", host,
+                "-p", port,
+                "-U", dbUsername,
+                "-F", "p",
+                "-b",
+                "-v",
+                dbName
+        );
 
         pb.environment().put("PGPASSWORD", dbPassword);
 
@@ -277,26 +263,14 @@ public class BackupService {
         String port = extractPortFromUrl(dbUrl);
         log.info("Executing psql restore to Database: '{}', Host: '{}', Port: '{}'", dbName, host, port);
 
-        ProcessBuilder pb;
-        if (dbUrl.contains("socketFactory")) {
-            log.info("Using GCP Cloud SQL socket restore psql config.");
-            pb = new ProcessBuilder(
-                    "psql",
-                    "-U", dbUsername,
-                    "-d", dbName,
-                    "-f", savedSqlPath.toString()
-            );
-        } else {
-            log.info("Using standard TCP restore psql config.");
-            pb = new ProcessBuilder(
-                    "psql",
-                    "-h", host,
-                    "-p", port,
-                    "-U", dbUsername,
-                    "-d", dbName,
-                    "-f", savedSqlPath.toString()
-            );
-        }
+        ProcessBuilder pb = new ProcessBuilder(
+                "psql",
+                "-h", host,
+                "-p", port,
+                "-U", dbUsername,
+                "-d", dbName,
+                "-f", savedSqlPath.toString()
+        );
 
         pb.environment().put("PGPASSWORD", dbPassword);
 

@@ -1,7 +1,7 @@
 package com.director_appraisal.director_appraisal.service;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,10 +13,9 @@ import java.nio.file.StandardOpenOption;
 
 /**
  * Local filesystem implementation of StorageService.
- * Active under "vm" or fallback "default" profile.
  */
 @Service
-@Profile({"vm", "default"})
+@Primary
 public class LocalFileStorageService implements StorageService {
 
     private final String localUploadPath;

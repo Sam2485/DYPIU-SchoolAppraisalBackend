@@ -8,14 +8,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class UrlPostProcessorConfig {
 
-    @Value("${app.gcp.enabled:false}")
-    private boolean gcpEnabled;
-
-    @Value("${app.gcp.bucket-name:schoolappraisal-attachments}")
-    private String bucketName;
-
     @PostConstruct
     public void init() {
-        UrlPostProcessor.init(gcpEnabled, bucketName);
+        UrlPostProcessor.init(false, "schoolappraisal-attachments");
     }
 }
