@@ -143,6 +143,16 @@ public class SubmissionService {
 
             progress.put(post, "SUBMITTED");
             valuesNode.set("administrativeProgress", progress);
+
+            com.fasterxml.jackson.databind.node.ObjectNode statusNode = objectNodeOrEmpty(mapper, valuesNode.get("__administrativeSubmissionStatus"));
+            com.fasterxml.jackson.databind.node.ObjectNode postStatus = mapper.createObjectNode();
+            postStatus.put("submitted", true);
+            postStatus.put("submittedAt", LocalDateTime.now().toString());
+            postStatus.put("name", caller.getName());
+            postStatus.put("email", caller.getEmail());
+            statusNode.set(post, postStatus);
+            valuesNode.set("__administrativeSubmissionStatus", statusNode);
+
             lockedSubmission.setValuesData(mapper.writeValueAsString(valuesNode));
 
             com.fasterxml.jackson.databind.node.ObjectNode detailsNode;
@@ -932,6 +942,34 @@ public class SubmissionService {
 
     public List<Submission> getAllSubmissionsForUser(User user) {
         String role = user.getRole().toLowerCase();
+
+        // Auto-sync administrative draft submission statuses if all active posts submitted
+        try {
+            List<Submission> draftAdminForms = submissionRepository.findAllByEmailIgnoreCase(SHARED_ADMINISTRATIVE_EMAIL).stream()
+                    .filter(sub -> "administrative".equalsIgnoreCase(sub.getAuditType()) && "DRAFT".equalsIgnoreCase(sub.getStatus()))
+                    .toList();
+            for (Submission draftAdmin : draftAdminForms) {
+                ObjectMapper mapper = new ObjectMapper();
+                com.fasterxml.jackson.databind.node.ObjectNode values = objectNodeOrEmpty(mapper, draftAdmin.getValuesData());
+                com.fasterxml.jackson.databind.node.ObjectNode progress = administrativeProgressNode(mapper, values);
+                boolean allSubmitted = ADMIN_POSTS.stream()
+                        .allMatch(requiredPost -> {
+                            if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
+                                return true;
+                            }
+                            String st = progress.path(requiredPost).asText("DRAFT");
+                            return "SUBMITTED".equalsIgnoreCase(st) || "APPROVED".equalsIgnoreCase(st);
+                        });
+                if (allSubmitted) {
+                    draftAdmin.setStatus("SUBMITTED");
+                    if (draftAdmin.getSubmittedAt() == null) {
+                        draftAdmin.setSubmittedAt(LocalDateTime.now());
+                    }
+                    submissionRepository.save(draftAdmin);
+                }
+            }
+        } catch (Exception ignored) {}
+
         List<Submission> list;
 
         if ("iqac".equals(role)) {
@@ -2013,6 +2051,14 @@ public class SubmissionService {
                 }
             }
         } catch (Exception ignored) {}
+
+        try {
+            com.fasterxml.jackson.databind.JsonNode progress = values.get("administrativeProgress");
+            if (progress != null && "SUBMITTED".equalsIgnoreCase(progress.path(post).asText())) {
+                return hasActiveAdministrativeUserForPost(post);
+            }
+        } catch (Exception ignored) {}
+
         return false;
     }
 
