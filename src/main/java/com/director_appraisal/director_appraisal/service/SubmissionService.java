@@ -256,6 +256,7 @@ public class SubmissionService {
                 removeAdministrativeOwnedFields(tables, this::classifyAdministrativeTableSection, sections);
                 resetAdministrativeProgress(values, posts);
                 removeAdministrativeApprovals(values, posts);
+                removeAdministrativeSubmissionStatus(values, posts);
                 locked.setSubmittedByDetails(removeAdministrativeSubmittedByDetails(mapper, locked.getSubmittedByDetails(), posts));
 
                 locked.setValuesData(mapper.writeValueAsString(values));
@@ -1997,8 +1998,36 @@ public class SubmissionService {
         return false;
     }
 
+    private boolean isSubmittedByActiveUser(com.fasterxml.jackson.databind.node.ObjectNode values, String post) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode statusNode = values.get("__administrativeSubmissionStatus");
+            if (statusNode != null && statusNode.isObject() && statusNode.has(post)) {
+                com.fasterxml.jackson.databind.JsonNode postNode = statusNode.get(post);
+                if (postNode != null && postNode.path("submitted").asBoolean()) {
+                    String email = postNode.path("email").asText(null);
+                    if (email != null && !email.isBlank()) {
+                        return userRepository.findByEmail(email.trim().toLowerCase())
+                                .filter(u -> !Boolean.TRUE.equals(u.getDeleted()))
+                                .isPresent();
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private void removeAdministrativeSubmissionStatus(com.fasterxml.jackson.databind.node.ObjectNode values, java.util.Set<String> posts) {
+        if (values == null) return;
+        com.fasterxml.jackson.databind.JsonNode statusNode = values.get("__administrativeSubmissionStatus");
+        if (statusNode == null || !statusNode.isObject()) {
+            return;
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode statusObj = (com.fasterxml.jackson.databind.node.ObjectNode) statusNode;
+        posts.forEach(statusObj::remove);
+    }
+
     private com.fasterxml.jackson.databind.node.ObjectNode administrativeProgressNode(ObjectMapper mapper,
-                                                                                     com.fasterxml.jackson.databind.node.ObjectNode values) {
+                                                                                      com.fasterxml.jackson.databind.node.ObjectNode values) {
         com.fasterxml.jackson.databind.JsonNode existing = values.get("administrativeProgress");
         com.fasterxml.jackson.databind.node.ObjectNode progress = existing != null && existing.isObject()
                 ? (com.fasterxml.jackson.databind.node.ObjectNode) existing.deepCopy()
@@ -2007,18 +2036,13 @@ public class SubmissionService {
             if (!hasActiveAdministrativeUserForPost(post)) {
                 progress.put(post, "APPROVED");
             } else {
-                if (!progress.has(post) || "APPROVED".equals(progress.path(post).asText())) {
-                    boolean hasSubmitted = false;
-                    try {
-                        com.fasterxml.jackson.databind.JsonNode statusNode = values.get("__administrativeSubmissionStatus");
-                        if (statusNode != null && statusNode.isObject() && statusNode.path(post).path("submitted").asBoolean()) {
-                            hasSubmitted = true;
-                        }
-                    } catch (Exception ignored) {}
-                    
-                    if (!hasSubmitted) {
-                        progress.put(post, "DRAFT");
-                    }
+                boolean submittedByActive = isSubmittedByActiveUser(values, post);
+                if (!submittedByActive) {
+                    progress.put(post, "DRAFT");
+                    removeAdministrativeSubmissionStatus(values, java.util.Set.of(post));
+                    removeAdministrativeApprovals(values, java.util.Set.of(post));
+                } else {
+                    progress.put(post, "SUBMITTED");
                 }
             }
         });
