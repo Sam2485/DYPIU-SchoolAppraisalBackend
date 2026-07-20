@@ -31,7 +31,7 @@ public class SecurityConfig {
 
     private final JwtRequestFilter jwtRequestFilter;
 
-    @Value("${app.security.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:*,http://10.100.0.23:3001,https://facultyappraisal-500016.web.app,https://dypiu-schoolappraisal-frontend-919405994318.asia-south1.run.app}")
+    @Value("${app.security.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:*,http://10.100.0.23:3001}")
     private List<String> allowedOrigins;
 
     @Bean
@@ -78,7 +78,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(allowedOrigins);
+        configuration.addAllowedOriginPattern("*");
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
