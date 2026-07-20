@@ -69,7 +69,11 @@ public class UserService implements UserDetailsService {
     }
 
     public Optional<User> findByEmail(String email) {
-        return userRepository.findByEmail(email);
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmail(email.trim().toLowerCase())
+                .filter(u -> !Boolean.TRUE.equals(u.getDeleted()));
     }
 
     public List<User> findAllUsers() {
@@ -84,9 +88,24 @@ public class UserService implements UserDetailsService {
 
     @Transactional
     public User createUser(User user) {
-        if (userRepository.existsByEmail(user.getEmail())) {
-            throw new IllegalArgumentException("User with email " + user.getEmail() + " already exists.");
+        String trimmedEmail = user.getEmail() != null ? user.getEmail().trim().toLowerCase() : "";
+        user.setEmail(trimmedEmail);
+
+        Optional<User> existingOpt = userRepository.findByEmail(trimmedEmail);
+        if (existingOpt.isPresent()) {
+            User existing = existingOpt.get();
+            if (Boolean.TRUE.equals(existing.getDeleted())) {
+                if (existing.getId() != null) {
+                    userAdministrativePostRepository.deleteByUserId(existing.getId());
+                }
+                resetTokenRepository.deleteByEmail(trimmedEmail);
+                userRepository.delete(existing);
+                userRepository.flush();
+            } else {
+                throw new IllegalArgumentException("User with email " + user.getEmail() + " already exists.");
+            }
         }
+
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
@@ -96,19 +115,9 @@ public class UserService implements UserDetailsService {
         if (user == null) {
             return;
         }
-        
+
         // Remove administrative contributions
         submissionService.removeAdministrativeUserContribution(user);
-
-        user.setDeleted(true);
-        user.setDeletedAt(java.time.LocalDateTime.now());
-        
-        try {
-            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null) {
-                user.setDeletedBy(auth.getName());
-            }
-        } catch (Exception ignored) {}
 
         if (user.getId() != null) {
             userAdministrativePostRepository.deleteByUserId(user.getId());
@@ -116,7 +125,9 @@ public class UserService implements UserDetailsService {
         if (user.getEmail() != null && !user.getEmail().isBlank()) {
             resetTokenRepository.deleteByEmail(user.getEmail().trim().toLowerCase());
         }
-        userRepository.save(user);
+
+        userRepository.delete(user);
+        userRepository.flush();
     }
 
     @Transactional
