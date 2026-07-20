@@ -1014,7 +1014,6 @@ public class SubmissionService {
         if ("iqac".equals(role)) {
             list = submissionRepository.findByStatusIn(IQAC_VISIBLE_STATUSES);
             System.out.println("[AUDIT_DEBUG] iqac list count: " + list.size());
-        }
         } else if ("vice-chancellor".equals(role)) {
             list = submissionRepository.findByStatusIn(VC_VISIBLE_STATUSES);
         } else if (role.contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType())) {
