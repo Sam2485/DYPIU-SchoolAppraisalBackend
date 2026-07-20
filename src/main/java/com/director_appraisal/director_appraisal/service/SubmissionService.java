@@ -304,52 +304,73 @@ public class SubmissionService {
         if (user == null) {
             return;
         }
-        String email = user.getEmail();
-        if (email == null || email.isBlank()) {
-            return;
+        String email = user.getEmail() != null ? user.getEmail().trim() : null;
+        String school = user.getSchool() != null ? user.getSchool().trim() : null;
+
+        List<Submission> submissions = new java.util.ArrayList<>();
+
+        if (email != null && !email.isBlank()) {
+            submissions.addAll(submissionRepository.findAllByEmailIgnoreCase(email));
         }
 
-        // Completely delete the user's uploads directory from local/GCP storage
-        attachmentService.deleteUserUploads(email);
+        if (school != null && !school.isBlank() && !"Root".equalsIgnoreCase(school)) {
+            List<Submission> schoolSubmissions = submissionRepository.findAll().stream()
+                    .filter(sub -> school.equalsIgnoreCase(sub.getSchool()))
+                    .toList();
+            for (Submission s : schoolSubmissions) {
+                if (s != null && s.getId() != null && submissions.stream().noneMatch(existing -> s.getId().equals(existing.getId()))) {
+                    submissions.add(s);
+                }
+            }
+        }
 
-        List<Submission> submissions = submissionRepository.findAllByEmailIgnoreCase(email.trim());
         for (Submission submission : submissions) {
-            if (submission.getId() == null) {
+            if (submission == null || submission.getId() == null) {
                 continue;
             }
-            // Delete physical files
-            if (submission.getAttachments() != null && !submission.getAttachments().isBlank()) {
-                try {
-                    ObjectMapper mapper = new ObjectMapper();
-                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(submission.getAttachments());
-                    if (root.isArray()) {
-                        root.forEach(item -> {
-                            String url = textField(item, "url", "fileUrl", "downloadUrl");
-                            if (url != null) {
-                                try {
-                                    attachmentService.deleteFile(url);
-                                } catch (Exception ignored) {}
-                            }
-                        });
-                    }
-                } catch (Exception ignored) {}
-            }
-            
-            // Delete table and values attachments
-            try {
-                java.util.Set<String> urls = new java.util.HashSet<>();
-                collectAttachmentUrls(submission.getTablesData(), urls);
-                collectAttachmentUrls(submission.getValuesData(), urls);
-                for (String url : urls) {
+
+            Long rootId = resolveRootSubmissionId(submission);
+            List<Submission> lineage = submissionRepository.findLineage(rootId);
+            for (Submission target : lineage) {
+                if (target == null || target.getId() == null) continue;
+
+                // Delete physical files
+                if (target.getAttachments() != null && !target.getAttachments().isBlank()) {
                     try {
-                        attachmentService.deleteFile(url);
+                        ObjectMapper mapper = new ObjectMapper();
+                        com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(target.getAttachments());
+                        if (root.isArray()) {
+                            root.forEach(item -> {
+                                String url = textField(item, "url", "fileUrl", "downloadUrl");
+                                if (url != null) {
+                                    try {
+                                        attachmentService.deleteFile(url);
+                                    } catch (Exception ignored) {}
+                                }
+                            });
+                        }
                     } catch (Exception ignored) {}
                 }
-            } catch (Exception ignored) {}
 
-            snapshotRepository.deleteBySubmissionId(submission.getId());
-            auditorAssignmentRepository.deleteBySubmissionId(submission.getId());
-            submissionRepository.delete(submission);
+                try {
+                    java.util.Set<String> urls = new java.util.HashSet<>();
+                    collectAttachmentUrls(target.getTablesData(), urls);
+                    collectAttachmentUrls(target.getValuesData(), urls);
+                    for (String url : urls) {
+                        try {
+                            attachmentService.deleteFile(url);
+                        } catch (Exception ignored) {}
+                    }
+                } catch (Exception ignored) {}
+
+                snapshotRepository.deleteBySubmissionId(target.getId());
+                auditorAssignmentRepository.deleteBySubmissionId(target.getId());
+                submissionRepository.delete(target);
+            }
+        }
+
+        if (email != null && !email.isBlank()) {
+            attachmentService.deleteUserUploads(email);
         }
     }
 

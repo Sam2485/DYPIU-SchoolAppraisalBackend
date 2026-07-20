@@ -116,8 +116,12 @@ public class UserService implements UserDetailsService {
             return;
         }
 
-        // Remove administrative contributions
-        submissionService.removeAdministrativeUserContribution(user);
+        // Remove administrative contributions or delete user's submissions
+        if ("administrative".equalsIgnoreCase(user.getRole())) {
+            submissionService.removeAdministrativeUserContribution(user);
+        } else {
+            submissionService.deleteUserSubmissionsAndAttachments(user);
+        }
 
         if (user.getId() != null) {
             userAdministrativePostRepository.deleteByUserId(user.getId());
