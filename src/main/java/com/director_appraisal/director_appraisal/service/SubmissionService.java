@@ -1350,8 +1350,8 @@ public class SubmissionService {
             String post = "academic".equalsIgnoreCase(submission.getAuditType()) ? auditor.getSchool() : auditor.getPost();
             if (post != null) posts.add(post);
 
-            Optional<SubmissionAuditorAssignment> existingAssignment = auditorAssignmentRepository
-                    .findBySubmissionIdAndAuditorIdAndAuditorType(submission.getId(), auditor.getId(), "external");
+            List<SubmissionAuditorAssignment> existingAssignment = auditorAssignmentRepository
+                    .findBySubmissionIdAndAuditorId(submission.getId(), auditor.getId());
             if (existingAssignment.isEmpty()) {
                 SubmissionAuditorAssignment assignment = SubmissionAuditorAssignment.builder()
                         .submissionId(submission.getId())
@@ -1359,9 +1359,8 @@ public class SubmissionService {
                         .auditorName(auditor.getName())
                         .auditorEmail(auditor.getEmail())
                         .auditorType("external")
-                        .auditCategory(submission.getAuditType())
+                        .category(submission.getAuditType())
                         .post(post)
-                        .school(auditor.getSchool())
                         .status("PENDING")
                         .assignedAt(LocalDateTime.now())
                         .build();
@@ -1380,7 +1379,7 @@ public class SubmissionService {
 
         submission.setForwardedAuditorType("external");
         submission.setStatus("FORWARDED_TO_EXTERNAL_AUDITOR");
-        submission.setForwardedToAuditorAt(LocalDateTime.now());
+        submission.setForwardedAt(LocalDateTime.now());
         submissionRepository.save(submission);
     }
 
