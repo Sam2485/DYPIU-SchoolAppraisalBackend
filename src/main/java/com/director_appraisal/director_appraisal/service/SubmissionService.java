@@ -478,18 +478,16 @@ public class SubmissionService {
         Optional<Submission> editableCycle = submissionRepository
                 .findFirstByEmailAndAuditTypeAndAcademicYearAndStatusInOrderByIdDesc(email, auditType, academicYear, EDITABLE_CYCLE_STATUSES);
         if (editableCycle.isPresent()) {
-            return editableCycle.get();
+            Submission sub = editableCycle.get();
+            populateAuditorProgressAndAssignments(sub);
+            return sub;
         }
 
         Optional<Submission> latestCycle = submissionRepository.findFirstByEmailAndAuditTypeAndAcademicYearOrderByIdDesc(email, auditType, academicYear);
         if (latestCycle.isPresent()) {
-            String statusUpper = latestCycle.get().getStatus().toUpperCase();
-            if (isApprovalStatus(statusUpper)) {
-                throw new SecurityException("Cannot edit an approved submission");
-            }
-            if (LOCKED_STATUSES.contains(statusUpper)) {
-                throw new IllegalStateException("Cannot edit submission when status is " + statusUpper);
-            }
+            Submission sub = latestCycle.get();
+            populateAuditorProgressAndAssignments(sub);
+            return sub;
         }
 
         Submission submission = Submission.builder()
@@ -506,7 +504,9 @@ public class SubmissionService {
                 .build();
         Submission saved = submissionRepository.save(submission);
         saved.setRootSubmissionId(saved.getId());
-        return submissionRepository.save(saved);
+        Submission finalSaved = submissionRepository.save(saved);
+        populateAuditorProgressAndAssignments(finalSaved);
+        return finalSaved;
     }
 
     @Transactional
@@ -2756,21 +2756,29 @@ public class SubmissionService {
     }
 
     private Map<String, Object> toVersionHistoryResponse(Submission submission) {
+        populateAuditorProgressAndAssignments(submission);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", submission.getId());
+        response.put("submissionId", submission.getId());
         response.put("version", submission.getVersion());
         response.put("academicYear", submission.getAcademicYear() != null ? submission.getAcademicYear() : submission.getAuditCycle());
         response.put("auditCycle", submission.getAuditCycle());
         response.put("schoolGroup", submission.getSchoolGroup());
         response.put("reportCategory", submission.getReportCategory());
+        response.put("approvedReportCategory", submission.getReportCategory());
         response.put("status", submission.getStatus());
+        response.put("overallStatus", submission.getStatus());
         response.put("valuesData", submission.getValuesData());
+        response.put("values", submission.getValuesData());
         response.put("tablesData", submission.getTablesData());
+        response.put("tables", submission.getTablesData());
         response.put("attachments", submission.getAttachments());
+        response.put("remarks", submission.getRemarks());
         response.put("auditorReviewedBy", submission.getAuditorReviewedBy());
         response.put("auditorReviewedOn", submission.getAuditorReviewedOn());
         response.put("approvedByName", submission.getApprovedByName());
         response.put("approvedAt", submission.getApprovedAt());
+        response.put("auditorAssignments", submission.getAuditorAssignments());
         return response;
     }
 
