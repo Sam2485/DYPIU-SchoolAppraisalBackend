@@ -95,11 +95,13 @@ public class TableDataPromotionService {
         try {
             root = objectMapper.readTree(tablesData);
         } catch (Exception e) {
-            throw new IllegalStateException("Cannot sync submission tables because tables data is invalid JSON", e);
+            log.warn("Cannot sync submission tables for submission {} because tables data is invalid JSON: {}", submission.getId(), e.getMessage());
+            return;
         }
 
-        if (!root.isObject()) {
-            throw new IllegalStateException("Cannot sync submission tables because tables data must be a JSON object");
+        if (root == null || !root.isObject()) {
+            log.warn("Cannot sync submission tables for submission {} because tables data must be a JSON object", submission.getId());
+            return;
         }
 
         Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
