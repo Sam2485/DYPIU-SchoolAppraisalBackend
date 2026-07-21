@@ -1244,6 +1244,9 @@ public class SubmissionService {
                     throw new IllegalStateException("Form can only be finalized after the audit has been completed by an auditor");
                 }
                 submission.setStatus(STATUS_APPROVED_LEGACY);
+                if (remarks != null && !remarks.isBlank()) {
+                    submission.setRemarks(remarks);
+                }
                 String expectedReportCategory = resolveExpectedReportCategoryForApproval(submission);
                 submission.setReportCategory(expectedReportCategory);
                 ensureAcademicYear(submission);
