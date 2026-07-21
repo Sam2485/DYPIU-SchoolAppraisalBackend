@@ -1631,12 +1631,21 @@ public class SubmissionService {
         if (!"auditor".equals(accountType) && (role == null || !role.contains("auditor"))) {
             throw new IllegalArgumentException("Selected user is not an auditor: " + auditor.getEmail());
         }
-        if (auditor.getCategory() == null || !auditor.getCategory().equalsIgnoreCase(auditType)) {
+        
+        String auditorCategory = auditor.getCategory() != null && !auditor.getCategory().isBlank() 
+                ? auditor.getCategory() 
+                : "academic";
+        if (!auditorCategory.equalsIgnoreCase(auditType)) {
             throw new IllegalArgumentException("Selected auditor category does not match submission audit type: " + auditor.getEmail());
         }
-        if (auditor.getAuditorType() == null || !auditor.getAuditorType().equalsIgnoreCase(requestedType)) {
+
+        String auditorType = auditor.getAuditorType() != null && !auditor.getAuditorType().isBlank()
+                ? auditor.getAuditorType()
+                : "internal";
+        if (!auditorType.equalsIgnoreCase(requestedType)) {
             throw new IllegalArgumentException("Selected auditor type does not match requested auditor type: " + auditor.getEmail());
         }
+
         if ("academic".equalsIgnoreCase(auditType)) {
             String submissionSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
             String auditorSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
