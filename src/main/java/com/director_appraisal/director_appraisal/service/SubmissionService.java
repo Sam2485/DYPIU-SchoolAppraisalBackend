@@ -305,23 +305,11 @@ public class SubmissionService {
             return;
         }
         String email = user.getEmail() != null ? user.getEmail().trim() : null;
-        String school = user.getSchool() != null ? user.getSchool().trim() : null;
 
         List<Submission> submissions = new java.util.ArrayList<>();
 
         if (email != null && !email.isBlank()) {
             submissions.addAll(submissionRepository.findAllByEmailIgnoreCase(email));
-        }
-
-        if (school != null && !school.isBlank() && !"Root".equalsIgnoreCase(school)) {
-            List<Submission> schoolSubmissions = submissionRepository.findAll().stream()
-                    .filter(sub -> school.equalsIgnoreCase(sub.getSchool()))
-                    .toList();
-            for (Submission s : schoolSubmissions) {
-                if (s != null && s.getId() != null && submissions.stream().noneMatch(existing -> s.getId().equals(existing.getId()))) {
-                    submissions.add(s);
-                }
-            }
         }
 
         for (Submission submission : submissions) {
