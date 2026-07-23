@@ -102,6 +102,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Boot Starter Data Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Spring Boot Starter Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

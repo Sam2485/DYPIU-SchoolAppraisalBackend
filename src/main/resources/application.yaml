@@ -53,6 +53,13 @@ spring:
             enable: true
             required: true
 
+  # ── Redis Configuration ───────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
 # ── JWT & Custom Configs ──────────────────────────────────────────────────────
 app:
   jwt:
@@ -63,6 +70,17 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   mail:
     from: ${MAIL_FROM:${spring.mail.username:your-email@gmail.com}}
+
+# ── Rate Limiting Configs ─────────────────────────────────────────────────────
+rate-limit:
+  login:
+    capacity: ${RATE_LIMIT_LOGIN_CAPACITY:5}
+    refillTokens: ${RATE_LIMIT_LOGIN_REFILL_TOKENS:5}
+    refillDuration: ${RATE_LIMIT_LOGIN_REFILL_DURATION:60s}
+  forgot:
+    capacity: ${RATE_LIMIT_FORGOT_CAPACITY:5}
+    refillTokens: ${RATE_LIMIT_FORGOT_REFILL_TOKENS:5}
+    refillDuration: ${RATE_LIMIT_FORGOT_REFILL_DURATION:60s}
 
 logging:
   level:

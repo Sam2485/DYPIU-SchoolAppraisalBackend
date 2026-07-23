@@ -6,6 +6,7 @@ import com.director_appraisal.director_appraisal.repository.UserAdministrativePo
 import com.director_appraisal.director_appraisal.service.AcademicYearService;
 import com.director_appraisal.director_appraisal.service.JwtService;
 import com.director_appraisal.director_appraisal.service.UserService;
+import com.director_appraisal.director_appraisal.service.RateLimiterService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,8 @@ public class AuthController {
     private final JwtService jwtService;
     private final AcademicYearService academicYearService;
     private final UserAdministrativePostRepository userAdministrativePostRepository;
+    private final RateLimiterService rateLimiterService;
+    private final jakarta.servlet.http.HttpServletRequest httpServletRequest;
 
     @org.springframework.beans.factory.annotation.Value("${app.gcp.enabled:false}")
     private boolean gcpEnabled;
@@ -35,11 +38,34 @@ public class AuthController {
         String email = loginRequest.getUsername().trim().toLowerCase();
         String password = loginRequest.getPassword();
 
+        String clientIp = rateLimiterService.getClientIp(httpServletRequest);
+        String ipKey = "login:ip:" + clientIp;
+        String userKey = "login:user:" + email;
+
+        RateLimiterService.RateLimitResult rateLimitResult = rateLimiterService.checkLimit(ipKey, userKey, "login");
+        if (!rateLimitResult.allowed) {
+            org.slf4j.LoggerFactory.getLogger(AuthController.class).warn(
+                "Rate limit exceeded for endpoint: login, client IP: {}, user: {}, timestamp: {}",
+                clientIp, email, java.time.Instant.now()
+            );
+            return ResponseEntity.status(429)
+                    .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                    .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                    .header("Retry-After", String.valueOf(rateLimitResult.retryAfter))
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Too many requests. Please try again after one minute."
+                    ));
+        }
+
         User user = userService.findByEmail(email)
                 .orElse(null);
 
         if (user == null || !userService.checkPassword(password, user.getPassword())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Invalid email address or password."));
+            return ResponseEntity.badRequest()
+                    .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                    .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                    .body(Map.of("message", "Invalid email address or password."));
         }
 
         String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
@@ -61,23 +87,26 @@ public class AuthController {
         // Generate JWT Token
         String token = jwtService.generateToken(user, claims);
 
-        return ResponseEntity.ok(new LoginResponse(
-                token,
-                user.getEmail(),
-                user.getName(),
-                user.getDesignation(),
-                school,
-                role,
-                user.getId(),
-                user.getId(),
-                user.getAccountType(),
-                user.getCategory(),
-                user.getAuditorType(),
-                user.getAuditorRole(),
-                canonicalPost,
-                currentAcademicYear,
-                administrativePosts
-        ));
+        return ResponseEntity.ok()
+                .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                .body(new LoginResponse(
+                        token,
+                        user.getEmail(),
+                        user.getName(),
+                        user.getDesignation(),
+                        school,
+                        role,
+                        user.getId(),
+                        user.getId(),
+                        user.getAccountType(),
+                        user.getCategory(),
+                        user.getAuditorType(),
+                        user.getAuditorRole(),
+                        canonicalPost,
+                        currentAcademicYear,
+                        administrativePosts
+                ));
     }
 
     @PostMapping("/forgot-password")
@@ -87,23 +116,53 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("message", "Email is required."));
         }
 
+        String trimmedEmail = email.trim().toLowerCase();
+        String clientIp = rateLimiterService.getClientIp(httpServletRequest);
+        String ipKey = "forgot:ip:" + clientIp;
+        String userKey = "forgot:user:" + trimmedEmail;
+
+        RateLimiterService.RateLimitResult rateLimitResult = rateLimiterService.checkLimit(ipKey, userKey, "forgot");
+        if (!rateLimitResult.allowed) {
+            org.slf4j.LoggerFactory.getLogger(AuthController.class).warn(
+                "Rate limit exceeded for endpoint: forgot-password, client IP: {}, user: {}, timestamp: {}",
+                clientIp, trimmedEmail, java.time.Instant.now()
+            );
+            return ResponseEntity.status(429)
+                    .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                    .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                    .header("Retry-After", String.valueOf(rateLimitResult.retryAfter))
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Too many requests. Please try again after one minute."
+                    ));
+        }
+
         try {
-            String token = userService.createPasswordResetToken(email);
+            String token = userService.createPasswordResetToken(trimmedEmail);
             if (gcpEnabled) {
-                return ResponseEntity.ok(Map.of(
-                        "message", "If that email is registered, a reset link has been generated."
-                ));
+                return ResponseEntity.ok()
+                        .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                        .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                        .body(Map.of(
+                                "message", "If that email is registered, a reset link has been generated."
+                        ));
             } else {
-                return ResponseEntity.ok(Map.of(
-                        "message", "If that email is registered, a reset link has been generated.",
-                        "token", token
-                ));
+                return ResponseEntity.ok()
+                        .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                        .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                        .body(Map.of(
+                                "message", "If that email is registered, a reset link has been generated.",
+                                "token", token
+                        ));
             }
         } catch (Exception e) {
             // Standard safety practice: return identical response even if user email doesn't exist
-            return ResponseEntity.ok(Map.of(
-                    "message", "If that email is registered, a reset link has been generated."
-            ));
+            return ResponseEntity.ok()
+                    .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                    .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                    .body(Map.of(
+                            "message", "If that email is registered, a reset link has been generated."
+                    ));
         }
     }
 
