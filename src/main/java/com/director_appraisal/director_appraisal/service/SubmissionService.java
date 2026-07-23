@@ -3432,12 +3432,23 @@ public class SubmissionService {
             allAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
         }
         
-        int total = allAssignments.size();
-        int submitted = (int) allAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
+        java.util.List<SubmissionAuditorAssignment> validAssignments = allAssignments;
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
+            validAssignments = allAssignments.stream()
+                    .filter(a -> {
+                        String postCanonical = canonicalAdministrativePost(a.getPost());
+                        return postCanonical != null && validAdminPosts.contains(postCanonical);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        
+        int total = validAssignments.size();
+        int submitted = (int) validAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
         int pending = total - submitted;
         boolean allSubmitted = (total > 0 && pending == 0);
         
-        if (allSubmitted || total == 0) {
+        if (allSubmitted || (total == 0 && !"administrative".equalsIgnoreCase(submission.getAuditType()))) {
             submission.setStatus("AUDITOR_COMPLETED");
             submission.setAuditorReviewedBy(caller.getName());
             submission.setAuditorReviewedByEmail(caller.getEmail());
@@ -3471,14 +3482,25 @@ public class SubmissionService {
             allAssignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
         }
         
+        java.util.List<SubmissionAuditorAssignment> validAssignments = allAssignments;
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
+            validAssignments = allAssignments.stream()
+                    .filter(a -> {
+                        String postCanonical = canonicalAdministrativePost(a.getPost());
+                        return postCanonical != null && validAdminPosts.contains(postCanonical);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        
         ObjectMapper mapper = new ObjectMapper();
         java.util.List<java.util.Map<String, Object>> assignmentsList = new java.util.ArrayList<>();
-        int total = allAssignments.size();
+        int total = validAssignments.size();
         int submitted = 0;
         
         java.util.Map<String, java.util.Map<String, Object>> byPostMap = new java.util.LinkedHashMap<>();
         
-        for (SubmissionAuditorAssignment assignment : allAssignments) {
+        for (SubmissionAuditorAssignment assignment : validAssignments) {
             boolean isSub = "SUBMITTED".equalsIgnoreCase(assignment.getStatus());
             if (isSub) submitted++;
             
@@ -3566,14 +3588,34 @@ public class SubmissionService {
             allAssignments.addAll(auditorAssignmentRepository.findBySubmissionId(submission.getRootSubmissionId()));
         }
         
+        java.util.List<SubmissionAuditorAssignment> currentValidAssignments = currentAssignments;
+        java.util.List<SubmissionAuditorAssignment> allValidAssignments = allAssignments;
+        
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
+            currentValidAssignments = currentAssignments.stream()
+                    .filter(a -> {
+                        String postCanonical = canonicalAdministrativePost(a.getPost());
+                        return postCanonical != null && validAdminPosts.contains(postCanonical);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+                    
+            allValidAssignments = allAssignments.stream()
+                    .filter(a -> {
+                        String postCanonical = canonicalAdministrativePost(a.getPost());
+                        return postCanonical != null && validAdminPosts.contains(postCanonical);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        
         ObjectMapper mapper = new ObjectMapper();
         java.util.List<java.util.Map<String, Object>> assignmentsList = new java.util.ArrayList<>();
-        int total = currentAssignments.size();
+        int total = currentValidAssignments.size();
         int submitted = 0;
         
         java.util.Map<String, java.util.Map<String, Object>> byPostMap = new java.util.LinkedHashMap<>();
         
-        for (SubmissionAuditorAssignment assignment : allAssignments) {
+        for (SubmissionAuditorAssignment assignment : allValidAssignments) {
             boolean isSub = "SUBMITTED".equalsIgnoreCase(assignment.getStatus());
             if (assignment.getSubmissionId().equals(submission.getId()) && isSub) {
                 submitted++;
@@ -3742,7 +3784,18 @@ public class SubmissionService {
                 remainingAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
             }
             
-            if (remainingAssignments.isEmpty()) {
+            java.util.List<SubmissionAuditorAssignment> validRemainingAssignments = remainingAssignments;
+            if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+                java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
+                validRemainingAssignments = remainingAssignments.stream()
+                        .filter(a -> {
+                            String postCanonical = canonicalAdministrativePost(a.getPost());
+                            return postCanonical != null && validAdminPosts.contains(postCanonical);
+                        })
+                        .collect(java.util.stream.Collectors.toList());
+            }
+            
+            if (validRemainingAssignments.isEmpty()) {
                 // No auditors left: revert to UNDER_REVIEW (removes it from IQAC completed dashboard)
                 submission.setStatus("UNDER_REVIEW");
                 submission.setAuditorReviewedBy(null);
@@ -3750,14 +3803,14 @@ public class SubmissionService {
                 submission.setAuditorReviewedByRole(null);
                 submission.setAuditorReviewedOn(null);
             } else {
-                int total = remainingAssignments.size();
-                int submitted = (int) remainingAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
+                int total = validRemainingAssignments.size();
+                int submitted = (int) validRemainingAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
                 int pending = total - submitted;
                 boolean allSubmitted = (pending == 0);
                 
                 if (allSubmitted) {
                     submission.setStatus("AUDITOR_COMPLETED");
-                    SubmissionAuditorAssignment lastSub = remainingAssignments.stream()
+                    SubmissionAuditorAssignment lastSub = validRemainingAssignments.stream()
                             .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()))
                             .findFirst().orElse(null);
                     if (lastSub != null) {
