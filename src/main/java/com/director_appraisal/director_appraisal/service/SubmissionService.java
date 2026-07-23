@@ -725,10 +725,40 @@ public class SubmissionService {
         }
 
         if (List.of(STATUS_APPROVED_LEGACY, STATUS_FINAL).contains(requestedStatus)) {
-            if (!"AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())
-                    && !"EXTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())
-                    && !"INTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())) {
-                throw new IllegalStateException("Form can only be approved after the audit has been completed by an auditor");
+            boolean isCompletedStatus = "AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())
+                    || "EXTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())
+                    || "INTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus());
+            
+            if (!isCompletedStatus) {
+                // Dynamically evaluate if all assigned auditors have submitted (dynamic self-healing fallback)
+                List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+                String forwardedType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "";
+                List<SubmissionAuditorAssignment> stageAssignments = allAssignments.stream()
+                        .filter(a -> a.getAuditorType() != null && a.getAuditorType().trim().toLowerCase().equals(forwardedType))
+                        .collect(java.util.stream.Collectors.toList());
+                
+                if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+                    java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
+                    stageAssignments = stageAssignments.stream()
+                            .filter(a -> {
+                                String postCanonical = canonicalAdministrativePost(a.getPost());
+                                return postCanonical != null && validAdminPosts.contains(postCanonical);
+                            })
+                            .collect(java.util.stream.Collectors.toList());
+                }
+                
+                int total = stageAssignments.size();
+                int submitted = (int) stageAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
+                int pending = total - submitted;
+                
+                boolean isCompletedDynamically = (total > 0 && pending == 0) || (total == 0);
+                
+                if (isCompletedDynamically) {
+                    submission.setStatus("AUDITOR_COMPLETED");
+                    submissionRepository.save(submission);
+                } else {
+                    throw new IllegalStateException("Form can only be approved after the audit has been completed by an auditor");
+                }
             }
         }
 
@@ -3446,9 +3476,9 @@ public class SubmissionService {
         int total = validAssignments.size();
         int submitted = (int) validAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
         int pending = total - submitted;
-        boolean allSubmitted = (total > 0 && pending == 0);
+        boolean allSubmitted = (total > 0 && pending == 0) || (total == 0);
         
-        if (allSubmitted || (total == 0 && !"administrative".equalsIgnoreCase(submission.getAuditType()))) {
+        if (allSubmitted) {
             submission.setStatus("AUDITOR_COMPLETED");
             submission.setAuditorReviewedBy(caller.getName());
             submission.setAuditorReviewedByEmail(caller.getEmail());
