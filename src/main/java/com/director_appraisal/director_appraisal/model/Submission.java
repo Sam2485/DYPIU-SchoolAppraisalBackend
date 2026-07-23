@@ -131,6 +131,14 @@ public class Submission {
     @Transient
     private Boolean allAuditorsSubmitted;
 
+    @Transient
+    private Boolean nextCycleStarted;
+
+    @com.fasterxml.jackson.annotation.JsonGetter("nextCycleStarted")
+    public Boolean getNextCycleStartedForJson() {
+        return (hasNextCycle != null && hasNextCycle) || nextVersionId != null || Boolean.TRUE.equals(nextCycleStarted);
+    }
+
     @Column(columnDefinition = "TEXT")
     private String forwardedAdministrativePosts;
 

@@ -3011,6 +3011,7 @@ public class SubmissionService {
         if (submission == null) return;
         
         populateAuditorProgressAndAssignments(submission);
+        populateNextCycleLinkage(submission);
         
         boolean isAuditor = user.getRole().toLowerCase().contains("auditor") || "auditor".equalsIgnoreCase(user.getAccountType());
         boolean isIqac = "iqac".equalsIgnoreCase(user.getRole());
@@ -3828,6 +3829,55 @@ public class SubmissionService {
             }
             
             submissionRepository.save(submission);
+        }
+    }
+
+    private void populateNextCycleLinkage(Submission submission) {
+        if (submission == null || submission.getId() == null) return;
+        
+        // We only care about approved internal reports (reportCategory = INTERNAL or version = 1)
+        boolean isInternal = "INTERNAL".equalsIgnoreCase(submission.getReportCategory()) 
+                || (submission.getVersion() != null && submission.getVersion() == 1);
+        if (!isInternal) {
+            return;
+        }
+        
+        // Find if a successor cycle exists
+        Optional<Submission> nextCycleOpt = submissionRepository.findByParentSubmissionId(submission.getId());
+        if (nextCycleOpt.isEmpty() && submission.getRootSubmissionId() != null) {
+            nextCycleOpt = submissionRepository.findByRootSubmissionIdAndVersion(submission.getRootSubmissionId(), 2);
+        }
+        
+        if (nextCycleOpt.isPresent()) {
+            Submission nextCycle = nextCycleOpt.get();
+            
+            // Populate fields on the source submission
+            submission.setHasNextCycle(true);
+            submission.setNextVersionId(nextCycle.getId());
+            submission.nextCycleStarted = true;
+            
+            // Sync linkages on the external successor cycle if missing
+            boolean nextModified = false;
+            if (nextCycle.getPreviousApprovedSubmissionId() == null || !nextCycle.getPreviousApprovedSubmissionId().equals(submission.getId())) {
+                nextCycle.setPreviousApprovedSubmissionId(submission.getId());
+                nextModified = true;
+            }
+            if (nextCycle.getParentSubmissionId() == null || !nextCycle.getParentSubmissionId().equals(submission.getId())) {
+                nextCycle.setParentSubmissionId(submission.getId());
+                nextModified = true;
+            }
+            Long expectedRootId = submission.getRootSubmissionId() != null ? submission.getRootSubmissionId() : submission.getId();
+            if (nextCycle.getRootSubmissionId() == null || !nextCycle.getRootSubmissionId().equals(expectedRootId)) {
+                nextCycle.setRootSubmissionId(expectedRootId);
+                nextModified = true;
+            }
+            if (!"EXTERNAL".equalsIgnoreCase(nextCycle.getReportCategory())) {
+                nextCycle.setReportCategory("EXTERNAL");
+                nextModified = true;
+            }
+            if (nextModified) {
+                submissionRepository.save(nextCycle);
+            }
         }
     }
 }
