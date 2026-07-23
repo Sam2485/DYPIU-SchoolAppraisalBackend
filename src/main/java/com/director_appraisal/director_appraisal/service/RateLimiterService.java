@@ -66,12 +66,12 @@ public class RateLimiterService {
                 @SuppressWarnings("unchecked")
                 public <K, V> List<Object> execute(org.springframework.data.redis.core.RedisOperations<K, V> operations) {
                     StringRedisTemplate stringOps = (StringRedisTemplate) operations;
-                    stringOps.watch(List.of((K) ipKey, (K) userKey));
+                    stringOps.watch(List.of(ipKey, userKey));
 
                     long nowMs = System.currentTimeMillis();
 
-                    Map<Object, Object> ipData = stringOps.opsForHash().entries((K) ipKey);
-                    Map<Object, Object> userData = stringOps.opsForHash().entries((K) userKey);
+                    Map<Object, Object> ipData = stringOps.opsForHash().entries(ipKey);
+                    Map<Object, Object> userData = stringOps.opsForHash().entries(userKey);
 
                     double ipTokens = getTokens(ipData, capacity, refillTokens, durationSec, nowMs);
                     double userTokens = getTokens(userData, capacity, refillTokens, durationSec, nowMs);
@@ -82,13 +82,13 @@ public class RateLimiterService {
                         remainingHolder[0] = Math.min(nextIpTokens, nextUserTokens);
 
                         stringOps.multi();
-                        stringOps.opsForHash().put((K) ipKey, "tokens", String.valueOf(nextIpTokens));
-                        stringOps.opsForHash().put((K) ipKey, "lastRefillTimeMs", String.valueOf(nowMs));
-                        stringOps.expire((K) ipKey, Duration.ofSeconds(durationSec));
+                        stringOps.opsForHash().put(ipKey, "tokens", String.valueOf(nextIpTokens));
+                        stringOps.opsForHash().put(ipKey, "lastRefillTimeMs", String.valueOf(nowMs));
+                        stringOps.expire(ipKey, Duration.ofSeconds(durationSec));
 
-                        stringOps.opsForHash().put((K) userKey, "tokens", String.valueOf(nextUserTokens));
-                        stringOps.opsForHash().put((K) userKey, "lastRefillTimeMs", String.valueOf(nowMs));
-                        stringOps.expire((K) userKey, Duration.ofSeconds(durationSec));
+                        stringOps.opsForHash().put(userKey, "tokens", String.valueOf(nextUserTokens));
+                        stringOps.opsForHash().put(userKey, "lastRefillTimeMs", String.valueOf(nowMs));
+                        stringOps.expire(userKey, Duration.ofSeconds(durationSec));
 
                         return stringOps.exec();
                     } else {
