@@ -392,37 +392,60 @@ public class UserController {
         String role = normalize(user.getRole());
         String accountType = normalize(user.getAccountType());
         if (isBlank(accountType)) {
-            accountType = (role != null && role.contains("auditor")) ? "auditor" : "user";
+            accountType = (role != null && role.toLowerCase().contains("auditor")) ? "auditor" : "user";
+        }
+        if ("auditor".equalsIgnoreCase(accountType) || (role != null && role.toLowerCase().contains("auditor"))) {
+            accountType = "auditor";
         }
         
         String category = user.getCategory();
         if (isBlank(category)) {
-            if ("director".equals(role)) {
+            String checkRole = (role != null ? role : "") + " " + (user.getAuditorRole() != null ? user.getAuditorRole() : "");
+            checkRole = checkRole.toLowerCase();
+            if (checkRole.contains("academic")) {
+                category = "academic";
+            } else if (checkRole.contains("administrative")) {
+                category = "administrative";
+            } else if ("director".equals(role)) {
                 category = "academic";
             } else if ("administrative".equals(role)) {
-                category = "administrative";
-            } else if (role != null && role.contains("academic")) {
-                category = "academic";
-            } else if (role != null && role.contains("administrative")) {
                 category = "administrative";
             } else {
                 category = "";
             }
         }
 
+        String auditorType = normalize(user.getAuditorType());
+        if (isBlank(auditorType) && "auditor".equals(accountType)) {
+            if (role != null && role.toLowerCase().contains("internal")) {
+                auditorType = "internal";
+            } else if (role != null && role.toLowerCase().contains("external")) {
+                auditorType = "external";
+            } else {
+                auditorType = "internal"; // fallback default
+            }
+        }
+
+        String schoolVal = isReviewerRole(role) ? null : user.getSchool();
+        List<String> adminPosts = getAdministrativePosts(user);
+
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", user.getId());
         response.put("name", user.getName());
         response.put("email", user.getEmail());
         response.put("category", category);
+        response.put("auditCategory", category);
         response.put("role", role);
-        response.put("school", isReviewerRole(role) ? null : user.getSchool());
+        response.put("school", schoolVal);
+        response.put("schoolName", schoolVal);
         response.put("designation", user.getDesignation());
         response.put("post", canonicalAdministrativePost(user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null)));
-        response.put("administrativePosts", getAdministrativePosts(user));
+        response.put("administrativePosts", adminPosts);
+        response.put("assignedPosts", adminPosts);
+        response.put("posts", adminPosts);
         
         response.put("accountType", accountType);
-        response.put("auditorType", user.getAuditorType());
+        response.put("auditorType", auditorType);
         response.put("auditorRole", user.getAuditorRole());
         response.put("status", user.getStatus() != null ? user.getStatus() : "active");
         return response;
