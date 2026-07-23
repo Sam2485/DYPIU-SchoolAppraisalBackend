@@ -870,6 +870,11 @@ public class SubmissionService {
     }
 
     public boolean isAuditorFallbackMatch(User auditor, Submission submission) {
+        List<SubmissionAuditorAssignment> assignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+        if (!assignments.isEmpty()) {
+            return false;
+        }
+
         boolean statusMatch = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "FORWARDED_TO_INTERNAL_AUDITOR", "FORWARDED_TO_EXTERNAL_AUDITOR").contains(submission.getStatus().toUpperCase());
         if (!statusMatch) {
             return false;
@@ -3275,18 +3280,8 @@ public class SubmissionService {
             System.out.println("[AUDIT_DEBUG] callerAssignments matched count: " + callerAssignments.size());
             if (!callerAssignments.isEmpty()) {
                 for (SubmissionAuditorAssignment assignment : callerAssignments) {
-                    String canonicalPost = canonicalAdministrativePost(assignment.getPost());
-                    boolean hasOverlap = canonicalPost != null && auditorPosts.contains(canonicalPost);
-                    System.out.println("[AUDIT_DEBUG] Checking assignment: id=" + assignment.getId() + ", post=" + assignment.getPost() + ", canonicalPost=" + canonicalPost + ", hasOverlap=" + hasOverlap);
-                    if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
-                        if (canonicalPost != null && auditorPosts.contains(canonicalPost)) {
-                            isAssigned = true;
-                            assignments.add(assignment);
-                        }
-                    } else {
-                        isAssigned = true;
-                        assignments.add(assignment);
-                    }
+                    isAssigned = true;
+                    assignments.add(assignment);
                 }
             }
         } else {
