@@ -48,7 +48,7 @@ public class SubmissionController {
         Submission draft = shared && "administrative".equals(normalizedAuditType)
                 ? submissionService.getOrCreateSharedAdministrativeDraft(user)
                 : submissionService.getOrCreateDraft(email, normalizedAuditType);
-        submissionService.populateAuditorProgressAndAssignments(draft);
+        submissionService.populatePermissions(draft, user);
         return ResponseEntity.ok(draft);
     }
 

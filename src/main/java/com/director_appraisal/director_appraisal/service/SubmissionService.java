@@ -54,7 +54,86 @@ public class SubmissionService {
             throw new SecurityException("Only administrative authorities can access the shared administrative form");
         }
         String academicYear = academicYearService.getCurrentAcademicYearLabel();
-        return getOrCreateSharedAdministrativeDraftForCycle(academicYear);
+        Submission submission = getOrCreateSharedAdministrativeDraftForCycle(academicYear);
+        
+        // Concurrency safety: row-level lock
+        Submission locked = submissionRepository.findByIdForUpdate(submission.getId()).orElse(submission);
+        
+        ObjectMapper mapper = new ObjectMapper();
+        boolean modified = false;
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode values = objectNodeOrEmpty(mapper, locked.getValuesData());
+            com.fasterxml.jackson.databind.node.ObjectNode tables = objectNodeOrEmpty(mapper, locked.getTablesData());
+            
+            com.fasterxml.jackson.databind.JsonNode statusNode = values.get("__administrativeSubmissionStatus");
+            if (statusNode != null && statusNode.isObject()) {
+                com.fasterxml.jackson.databind.node.ObjectNode statusObj = (com.fasterxml.jackson.databind.node.ObjectNode) statusNode;
+                java.util.Set<String> postsToClear = new java.util.LinkedHashSet<>();
+                
+                statusObj.fields().forEachRemaining(entry -> {
+                    String post = entry.getKey();
+                    com.fasterxml.jackson.databind.JsonNode postNode = entry.getValue();
+                    if (postNode != null && postNode.path("submitted").asBoolean()) {
+                        String email = postNode.path("email").asText(null);
+                        Long storedUserId = postNode.has("userId") ? postNode.get("userId").asLong() : null;
+                        
+                        boolean isActive = false;
+                        if (email != null && !email.isBlank()) {
+                            Optional<User> uOpt = userRepository.findByEmail(email.trim().toLowerCase())
+                                    .filter(u -> !Boolean.TRUE.equals(u.getDeleted()));
+                            if (uOpt.isPresent()) {
+                                User activeUser = uOpt.get();
+                                if (storedUserId == null || storedUserId.equals(activeUser.getId())) {
+                                    isActive = true;
+                                }
+                            }
+                        }
+                        
+                        if (!isActive) {
+                            postsToClear.add(post);
+                        }
+                    }
+                });
+                
+                if (!postsToClear.isEmpty()) {
+                    java.util.Set<String> sections = new java.util.LinkedHashSet<>();
+                    postsToClear.forEach(post -> sections.addAll(ownedAdministrativeSections(post)));
+                    
+                    removeAdministrativeOwnedFields(values, this::classifyAdministrativeValueSection, sections);
+                    removeAdministrativeOwnedFields(tables, this::classifyAdministrativeTableSection, sections);
+                    resetAdministrativeProgress(values, postsToClear);
+                    removeAdministrativeApprovals(values, postsToClear);
+                    removeAdministrativeSubmissionStatus(values, postsToClear);
+                    locked.setSubmittedByDetails(removeAdministrativeSubmittedByDetails(mapper, locked.getSubmittedByDetails(), postsToClear));
+                    
+                    locked.setValuesData(mapper.writeValueAsString(values));
+                    locked.setTablesData(mapper.writeValueAsString(tables));
+                    locked.setAttachments(removeAdministrativeOwnedAttachments(mapper, locked.getAttachments(), sections));
+                    
+                    boolean allSubmitted = ADMIN_POSTS.stream()
+                            .allMatch(requiredPost -> {
+                                if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
+                                    return true;
+                                }
+                                String status = values.path("administrativeProgress").path(requiredPost).asText("DRAFT");
+                                return "SUBMITTED".equalsIgnoreCase(status) || "APPROVED".equalsIgnoreCase(status);
+                            });
+                    if (!allSubmitted && !"DRAFT".equalsIgnoreCase(locked.getStatus())) {
+                        locked.setStatus("DRAFT");
+                        locked.setSubmittedAt(null);
+                    }
+                    
+                    modified = true;
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to dynamically clean up deleted administrative contributions", e);
+        }
+        
+        if (modified) {
+            return submissionRepository.save(locked);
+        }
+        return locked;
     }
 
     @Transactional
@@ -153,6 +232,7 @@ public class SubmissionService {
             postStatus.put("submittedAt", LocalDateTime.now().toString());
             postStatus.put("name", caller.getName());
             postStatus.put("email", caller.getEmail());
+            postStatus.put("userId", caller.getId());
             statusNode.set(post, postStatus);
             valuesNode.set("__administrativeSubmissionStatus", statusNode);
 
