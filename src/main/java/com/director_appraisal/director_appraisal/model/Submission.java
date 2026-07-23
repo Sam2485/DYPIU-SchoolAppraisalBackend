@@ -132,6 +132,14 @@ public class Submission {
     private Boolean allAuditorsSubmitted;
 
     @Transient
+    private Boolean allAssignedAuditorsSubmitted;
+
+    @com.fasterxml.jackson.annotation.JsonGetter("allAssignedAuditorsSubmitted")
+    public Boolean getAllAssignedAuditorsSubmittedForJson() {
+        return allAuditorsSubmitted;
+    }
+
+    @Transient
     private Boolean nextCycleStarted;
 
     @com.fasterxml.jackson.annotation.JsonGetter("nextCycleStarted")
@@ -175,8 +183,12 @@ public class Submission {
         if (!"administrative".equalsIgnoreCase(auditType)) {
             return status;
         }
-        if ("SUBMITTED".equalsIgnoreCase(status)) {
-            return "SUBMITTED";
+        if (status == null) {
+            return "DRAFT";
+        }
+        String upper = status.toUpperCase();
+        if (java.util.List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED", "FINAL", "SENT_BACK").contains(upper)) {
+            return upper;
         }
         java.util.Map<String, String> progress = getAdministrativeProgressForJson();
         boolean hasProgress = progress.values().stream().anyMatch(value -> !"DRAFT".equalsIgnoreCase(value));

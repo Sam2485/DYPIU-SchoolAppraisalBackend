@@ -3553,6 +3553,7 @@ public class SubmissionService {
         boolean allSubmitted = (total > 0 && pending == 0);
         
         subMap.put("allAuditorsSubmitted", allSubmitted);
+        subMap.put("allAssignedAuditorsSubmitted", allSubmitted);
         subMap.put("auditorAssignments", assignmentsList);
         
         java.util.Map<String, Object> progress = new java.util.HashMap<>();
@@ -3670,6 +3671,7 @@ public class SubmissionService {
         boolean allSubmitted = (total > 0 && pending == 0);
         
         submission.setAllAuditorsSubmitted(allSubmitted);
+        submission.setAllAssignedAuditorsSubmitted(allSubmitted);
         submission.setAuditorAssignments(assignmentsList);
         
         java.util.Map<String, Object> progress = new java.util.HashMap<>();
