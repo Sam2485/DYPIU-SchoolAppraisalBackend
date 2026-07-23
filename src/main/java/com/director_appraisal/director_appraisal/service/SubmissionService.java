@@ -1664,8 +1664,8 @@ public class SubmissionService {
                 System.out.println("[AUDIT_DEBUG] Auditor: email=" + auditor.getEmail() + ", auditorPosts=" + auditorPosts + ", activePostsForAuditor=" + activePostsForAuditor);
                 
                 if (activePostsForAuditor.isEmpty()) {
-                    activePostsForAuditor = auditorPosts;
-                    System.out.println("[AUDIT_DEBUG] activePostsForAuditor is empty, falling back to all auditorPosts: " + activePostsForAuditor);
+                    activePostsForAuditor = submissionPosts.isEmpty() ? java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare") : submissionPosts;
+                    System.out.println("[AUDIT_DEBUG] activePostsForAuditor is empty, falling back to: " + activePostsForAuditor);
                 }
                 
                 for (String post : activePostsForAuditor) {
@@ -3423,9 +3423,13 @@ public class SubmissionService {
             }
         }
         
-        allAssignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorType(submissionId, submission.getForwardedAuditorType());
+        List<SubmissionAuditorAssignment> allAssignmentsInDb = auditorAssignmentRepository.findBySubmissionId(submissionId);
+        String forwardedType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "";
+        allAssignments = allAssignmentsInDb.stream()
+                .filter(a -> a.getAuditorType() != null && a.getAuditorType().trim().toLowerCase().equals(forwardedType))
+                .collect(java.util.stream.Collectors.toList());
         if (allAssignments.isEmpty()) {
-            allAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
+            allAssignments = allAssignmentsInDb;
         }
         
         java.util.List<SubmissionAuditorAssignment> validAssignments = allAssignments;
@@ -3473,9 +3477,13 @@ public class SubmissionService {
         subMap.put("id", submission.getId());
         subMap.put("status", submission.getStatus());
         
-        List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorType(submission.getId(), auditorType);
+        List<SubmissionAuditorAssignment> allAssignmentsInDb = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+        String cleanType = auditorType != null ? auditorType.trim().toLowerCase() : "";
+        List<SubmissionAuditorAssignment> allAssignments = allAssignmentsInDb.stream()
+                .filter(a -> a.getAuditorType() != null && a.getAuditorType().trim().toLowerCase().equals(cleanType))
+                .collect(java.util.stream.Collectors.toList());
         if (allAssignments.isEmpty()) {
-            allAssignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+            allAssignments = allAssignmentsInDb;
         }
         
         java.util.List<SubmissionAuditorAssignment> validAssignments = allAssignments;
@@ -3777,9 +3785,13 @@ public class SubmissionService {
             }
             
             // Re-evaluate submission status based on remaining assignments
-            List<SubmissionAuditorAssignment> remainingAssignments = auditorAssignmentRepository.findBySubmissionIdAndAuditorType(submissionId, submission.getForwardedAuditorType());
+            List<SubmissionAuditorAssignment> remainingAssignmentsInDb = auditorAssignmentRepository.findBySubmissionId(submissionId);
+            String forwardedType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "";
+            List<SubmissionAuditorAssignment> remainingAssignments = remainingAssignmentsInDb.stream()
+                    .filter(a -> a.getAuditorType() != null && a.getAuditorType().trim().toLowerCase().equals(forwardedType))
+                    .collect(java.util.stream.Collectors.toList());
             if (remainingAssignments.isEmpty()) {
-                remainingAssignments = auditorAssignmentRepository.findBySubmissionId(submissionId);
+                remainingAssignments = remainingAssignmentsInDb;
             }
             
             java.util.List<SubmissionAuditorAssignment> validRemainingAssignments = remainingAssignments;
