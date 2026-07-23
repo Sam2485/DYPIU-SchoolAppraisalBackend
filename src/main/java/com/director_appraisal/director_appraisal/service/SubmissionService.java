@@ -3854,7 +3854,7 @@ public class SubmissionService {
             // Populate fields on the source submission
             submission.setHasNextCycle(true);
             submission.setNextVersionId(nextCycle.getId());
-            submission.nextCycleStarted = true;
+            submission.setNextCycleStarted(true);
             
             // Sync linkages on the external successor cycle if missing
             boolean nextModified = false;
