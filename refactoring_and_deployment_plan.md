@@ -237,4 +237,23 @@ server {
     #     proxy_set_header X-Real-IP $remote_addr;
     # }
 }
+
+---
+
+## 7. Multi-Auditor Review Workflow (Administrative Audits)
+
+### A. Core Architecture
+The system supports multiple assigned auditors (Internal and External) reviewing the same administrative submission concurrently. The lifecycle is managed via:
+1. **`SubmissionAuditorAssignment` Entity**: Maps a specific auditor (identified by `auditorId`/`auditorEmail`) and auditor type (`INTERNAL` or `EXTERNAL`) to a `Submission`.
+2. **Dynamic Completion Routing**: The overall submission status changes to `AUDITOR_COMPLETED` only when all assignments matching the active forwarded auditor type are in a `SUBMITTED` state.
+
+### B. Ownership Resolution
+To resolve which review remark data and draft values belong to the active logged-in auditor:
+* **First Match**: Explicit assignments matching `auditorId` or `auditorEmail`.
+* **Legacy Mapped Post Fallback**: Used only for legacy submissions lacking structured auditor assignments where matching is resolved via the auditor's administrative post.
+
+### C. Backend API Handlers
+* **`submitAuditorReview`**: Saves remarks, attachments, and transitions status. Recomputes progress across active assignments.
+* **`reviewSubmission` (IQAC Approval)**: Dynamically scans the database to verify if all auditor assignments for the active cycle have been completed before permitting approval.
+
 ```

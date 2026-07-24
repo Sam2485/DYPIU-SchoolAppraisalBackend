@@ -40,6 +40,22 @@ public class User implements UserDetails {
     private String auditorType;
     private String auditorRole;
     private String post;
+    private String schools;
+
+    public List<String> getSchoolsList() {
+        if (schools == null || schools.isBlank()) {
+            return java.util.List.of();
+        }
+        return java.util.List.of(schools.split(","));
+    }
+
+    public void setSchoolsList(List<String> list) {
+        if (list == null || list.isEmpty()) {
+            this.schools = null;
+        } else {
+            this.schools = String.join(",", list);
+        }
+    }
 
     @Builder.Default
     private String status = "active";

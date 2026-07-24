@@ -285,6 +285,7 @@ This module provides full CRUD capabilities over user profiles. Access is restri
         "school": "School of Computer Science & Applications",
         "designation": "Director",
         "post": null,
+        "schools": [],
         "status": "active"
       },
       {
@@ -296,6 +297,7 @@ This module provides full CRUD capabilities over user profiles. Access is restri
         "school": "Administrative Office",
         "designation": "Registrar",
         "post": "registrar",
+        "schools": [],
         "status": "active"
       }
     ]
@@ -324,7 +326,8 @@ This module provides full CRUD capabilities over user profiles. Access is restri
     "category": "academic", // or "auditCategory" ("academic" | "administrative")
     "auditorType": "internal", // "internal" | "external"
     "auditorRole": "academic-internal-auditor", // specific auditor role
-    "school": "School of Computer Science & Applications", // required for academic auditors
+    "school": "School of Computer Science & Applications", // legacy fallback / first school
+    "schools": ["School of Computer Science & Applications", "School of Design"], // list of assigned schools for academic auditors
     "post": null, // required for administrative auditors (e.g. "registrar", "hr", "dean-student-welfare", "dean-placement")
     "name": "Auditor Name",
     "email": "auditor@dypiu.ac.in",
@@ -344,6 +347,7 @@ This module provides full CRUD capabilities over user profiles. Access is restri
       "school": "School of Computer Science & Applications",
       "designation": "Internal Academic Auditor",
       "post": null,
+      "schools": ["School of Computer Science & Applications", "School of Design"],
       "accountType": "auditor",
       "auditorType": "internal",
       "auditorRole": "academic-internal-auditor",

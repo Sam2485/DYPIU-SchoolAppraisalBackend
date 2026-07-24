@@ -33,6 +33,21 @@ public class SubmissionAuditorAssignment {
     private LocalDateTime assignedAt;
     private String post;
 
+    @jakarta.persistence.Transient
+    public String getSchool() {
+        if ("academic".equalsIgnoreCase(category)) {
+            return post;
+        }
+        return null;
+    }
+
+    @jakarta.persistence.Transient
+    public void setSchool(String school) {
+        if ("academic".equalsIgnoreCase(category) || category == null) {
+            this.post = school;
+        }
+    }
+
     @Builder.Default
     private String status = "PENDING";
 

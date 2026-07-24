@@ -927,8 +927,15 @@ public class SubmissionService {
 
         if ("academic".equalsIgnoreCase(auditType)) {
             String subSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+            if (subSchool == null) return false;
+            List<String> schoolsList = auditor.getSchoolsList();
+            for (String sch : schoolsList) {
+                if (subSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(sch))) {
+                    return true;
+                }
+            }
             String audSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
-            return subSchool != null && subSchool.equalsIgnoreCase(audSchool);
+            return subSchool.equalsIgnoreCase(audSchool);
         } else if ("administrative".equalsIgnoreCase(auditType)) {
             java.util.Set<String> auditorPosts = resolveAdministrativePosts(auditor);
             java.util.Set<String> submissionPosts = resolveSubmissionPostsForList(submission);
@@ -964,6 +971,13 @@ public class SubmissionService {
                     
                     if ("academic".equalsIgnoreCase(forwardingAuditType)) {
                         String subSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+                        if (subSchool == null) return false;
+                        List<String> schoolsList = auditor.getSchoolsList();
+                        for (String sch : schoolsList) {
+                            if (subSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(sch))) {
+                                return true;
+                            }
+                        }
                         String audSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
                         return audSchool != null && audSchool.equalsIgnoreCase(subSchool);
                     } else {
@@ -1428,8 +1442,17 @@ public class SubmissionService {
         if ("academic".equalsIgnoreCase(submission.getAuditType())) {
             String school = submission.getSchool();
             if (school != null && !school.isBlank()) {
+                String canonicalSchool = SchoolUtils.canonicalizeSchool(school);
                 externalAuditors = externalAuditors.stream()
-                        .filter(u -> school.equalsIgnoreCase(u.getSchool()))
+                        .filter(u -> {
+                            List<String> schoolsList = u.getSchoolsList();
+                            for (String sch : schoolsList) {
+                                if (canonicalSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(sch))) {
+                                    return true;
+                                }
+                            }
+                            return school.equalsIgnoreCase(u.getSchool());
+                        })
                         .toList();
             }
         }
@@ -1449,7 +1472,9 @@ public class SubmissionService {
             names.add(auditor.getName());
             emails.add(auditor.getEmail());
             
-            String post = "academic".equalsIgnoreCase(submission.getAuditType()) ? auditor.getSchool() : auditor.getPost();
+            String post = "academic".equalsIgnoreCase(submission.getAuditType()) 
+                    ? (auditor.getSchoolsList().isEmpty() ? auditor.getSchool() : auditor.getSchoolsList().get(0)) 
+                    : auditor.getPost();
             if (post != null) posts.add(post);
 
             List<SubmissionAuditorAssignment> existingAssignment = auditorAssignmentRepository
@@ -1648,23 +1673,60 @@ public class SubmissionService {
             }
         }
 
-        List<User> selectedAuditors = selectedAuditorIds.stream()
-                .distinct()
-                .map(id -> userRepository.findById(id)
-                        .orElseThrow(() -> new IllegalArgumentException("Selected auditor not found: " + id)))
-                .toList();
+        List<User> targetAuditors = new java.util.ArrayList<>();
+        if ("academic".equalsIgnoreCase(auditType)) {
+            String canonicalSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
+            if (canonicalSchool != null) {
+                List<User> allUsers = userRepository.findAll();
+                for (User u : allUsers) {
+                    boolean isActiveAuditor = !Boolean.TRUE.equals(u.getDeleted())
+                            && "active".equalsIgnoreCase(u.getStatus())
+                            && "auditor".equalsIgnoreCase(u.getAccountType())
+                            && "academic".equalsIgnoreCase(u.getCategory())
+                            && requestedType.equalsIgnoreCase(u.getAuditorType());
+                    if (isActiveAuditor) {
+                        List<String> auditorSchools = u.getSchoolsList();
+                        boolean matchesSchool = false;
+                        for (String sch : auditorSchools) {
+                            if (canonicalSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(sch))) {
+                                matchesSchool = true;
+                                break;
+                            }
+                        }
+                        if (!matchesSchool && auditorSchools.isEmpty() && u.getSchool() != null) {
+                            if (canonicalSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(u.getSchool()))) {
+                                matchesSchool = true;
+                            }
+                        }
+                        if (matchesSchool) {
+                            targetAuditors.add(u);
+                        }
+                    }
+                }
+            }
+        } else {
+            targetAuditors = selectedAuditorIds.stream()
+                    .distinct()
+                    .map(id -> userRepository.findById(id)
+                            .orElseThrow(() -> new IllegalArgumentException("Selected auditor not found: " + id)))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        if (targetAuditors.isEmpty()) {
+            throw new IllegalArgumentException("No active auditors found or selected for review.");
+        }
 
         java.util.Set<String> submissionPosts = resolveSubmissionPosts(submission, forwardedAdministrativePosts);
 
-        for (User auditor : selectedAuditors) {
+        for (User auditor : targetAuditors) {
             validateSelectedAuditor(auditor, auditType, requestedType, submission, submissionPosts);
         }
 
         ObjectMapper mapper = new ObjectMapper();
         try {
-            submission.setForwardedToAuditorIds(mapper.writeValueAsString(selectedAuditors.stream().map(User::getId).toList()));
-            submission.setForwardedToAuditorNames(mapper.writeValueAsString(selectedAuditors.stream().map(User::getName).toList()));
-            submission.setForwardedToAuditorEmails(mapper.writeValueAsString(selectedAuditors.stream().map(User::getEmail).toList()));
+            submission.setForwardedToAuditorIds(mapper.writeValueAsString(targetAuditors.stream().map(User::getId).toList()));
+            submission.setForwardedToAuditorNames(mapper.writeValueAsString(targetAuditors.stream().map(User::getName).toList()));
+            submission.setForwardedToAuditorEmails(mapper.writeValueAsString(targetAuditors.stream().map(User::getEmail).toList()));
             if (forwardedAdministrativePosts != null) {
                 submission.setForwardedAdministrativePosts(mapper.writeValueAsString(forwardedAdministrativePosts));
             }
@@ -1675,7 +1737,7 @@ public class SubmissionService {
             throw new IllegalStateException("Unable to store selected auditor metadata", e);
         }
 
-        User first = selectedAuditors.get(0);
+        User first = targetAuditors.get(0);
         submission.setForwardedToAuditorId(first.getId());
         submission.setForwardedToAuditorName(first.getName());
         submission.setForwardedToAuditorEmail(first.getEmail());
@@ -1684,8 +1746,8 @@ public class SubmissionService {
         submission.setForwardedAt(LocalDateTime.now());
 
         LocalDateTime assignedAt = LocalDateTime.now();
-        System.out.println("[AUDIT_DEBUG] assignSelectedAuditorsForReview starting: selectedAuditors=" + selectedAuditors.stream().map(User::getEmail).toList() + ", submissionPosts=" + submissionPosts);
-        for (User auditor : selectedAuditors) {
+        System.out.println("[AUDIT_DEBUG] assignSelectedAuditorsForReview starting: targetAuditors=" + targetAuditors.stream().map(User::getEmail).toList() + ", submissionPosts=" + submissionPosts);
+        for (User auditor : targetAuditors) {
             if ("administrative".equalsIgnoreCase(auditType)) {
                 java.util.Set<String> auditorPosts = resolveAdministrativePosts(auditor);
                 java.util.Set<String> activePostsForAuditor = new java.util.HashSet<>(auditorPosts);
@@ -1722,11 +1784,11 @@ public class SubmissionService {
                         .auditorType(requestedType)
                         .category(auditType)
                         .assignedAt(assignedAt)
-                        .post(null)
+                        .post(submission.getSchool())
                         .status("PENDING")
                         .build();
                 auditorAssignmentRepository.save(assignment);
-                System.out.println("[AUDIT_DEBUG] Saved academic assignment: " + assignment.getId() + " for auditor=" + auditor.getEmail());
+                System.out.println("[AUDIT_DEBUG] Saved academic assignment: " + assignment.getId() + " for auditor=" + auditor.getEmail() + " school=" + submission.getSchool());
             }
         }
     }
@@ -1754,8 +1816,24 @@ public class SubmissionService {
 
         if ("academic".equalsIgnoreCase(auditType)) {
             String submissionSchool = SchoolUtils.canonicalizeSchool(submission.getSchool());
-            String auditorSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
-            if (submissionSchool == null || auditorSchool == null || !submissionSchool.equalsIgnoreCase(auditorSchool)) {
+            if (submissionSchool == null) {
+                throw new IllegalArgumentException("Submission school is missing.");
+            }
+            boolean matchesSchool = false;
+            List<String> schoolsList = auditor.getSchoolsList();
+            for (String sch : schoolsList) {
+                if (submissionSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(sch))) {
+                    matchesSchool = true;
+                    break;
+                }
+            }
+            if (!matchesSchool && schoolsList.isEmpty() && auditor.getSchool() != null) {
+                String auditorSchool = SchoolUtils.canonicalizeSchool(auditor.getSchool());
+                if (submissionSchool.equalsIgnoreCase(auditorSchool)) {
+                    matchesSchool = true;
+                }
+            }
+            if (!matchesSchool) {
                 throw new IllegalArgumentException("Academic auditor must match the submission school: " + auditor.getEmail());
             }
         } else if ("administrative".equalsIgnoreCase(auditType)) {

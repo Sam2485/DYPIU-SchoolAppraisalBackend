@@ -69,7 +69,7 @@ public class UserController {
                 return error(HttpStatus.CONFLICT, "Email already exists.");
             }
 
-            User savedUser = userService.createUser(User.builder()
+            User userToSave = User.builder()
                     .name(validatedUser.name)
                     .email(validatedUser.email)
                     .password(validatedUser.password)
@@ -81,7 +81,9 @@ public class UserController {
                     .auditorType(validatedUser.auditorType)
                     .auditorRole(validatedUser.auditorRole)
                     .post(validatedUser.post)
-                    .build());
+                    .build();
+            userToSave.setSchoolsList(validatedUser.schools);
+            User savedUser = userService.createUser(userToSave);
             saveAdministrativePosts(savedUser, validatedUser.administrativePosts);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
@@ -169,6 +171,7 @@ public class UserController {
             user.setAuditorType(validatedUser.auditorType);
             user.setAuditorRole(validatedUser.auditorRole);
             user.setPost(validatedUser.post);
+            user.setSchoolsList(validatedUser.schools);
 
             User savedUser = userService.updateUser(user, validatedUser.password);
             saveAdministrativePosts(savedUser, validatedUser.administrativePosts);

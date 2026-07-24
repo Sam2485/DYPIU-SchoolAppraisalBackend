@@ -20,6 +20,7 @@ Holds authentication and user metadata.
 - `designation` (VARCHAR(255)): Position title (e.g. Director, Registrar).
 - `school` (VARCHAR(255)): Mapped School or Office.
 - `role` (VARCHAR(100), NOT NULL): System role (`director`, `administrative`, `vice-chancellor`, `iqac`).
+- `schools` (VARCHAR(1000)): Comma-separated list of schools assigned to an academic auditor.
 
 ### submissions
 Holds the master state of academic and administrative audit form submissions.
@@ -151,6 +152,7 @@ Migrations are baseline managed inside the directory `src/main/resources/db/migr
 - **V10__add_submitted_by_details.sql**: Adds the `submitted_by_details` text column to track granular contributor submissions in shared administrative audits.
 - **V11__add_courses_offered_columns.sql**: Adds `students_admitted` and `attachment` columns to the `courses_offered` table for Section A.
 - **V12__add_staff_training_attachment.sql**: Adds the `attachment` column to the `staff_training` table for Section B.
+- **V15__add_user_schools_column.sql**: Adds the `schools` column to the `users` table to support many-to-many auditor↔school mapping.
 
 ---
 
