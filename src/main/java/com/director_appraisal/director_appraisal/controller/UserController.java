@@ -300,17 +300,32 @@ public class UserController {
             }
             role = auditorRole;
             
+            List<String> validatedSchools = new java.util.ArrayList<>();
             if ("academic".equals(category)) {
                 if (!administrativePosts.isEmpty()) {
                     throw new IllegalArgumentException("Academic auditors must not have administrativePosts.");
                 }
-                if (isBlank(school)) {
+                List<String> reqSchools = request.getSchools();
+                if (reqSchools != null) {
+                    for (String sch : reqSchools) {
+                        if (sch != null && !sch.isBlank()) {
+                            if (!SchoolUtils.isValidSchool(sch)) {
+                                throw new IllegalArgumentException("Invalid academic school: " + sch);
+                            }
+                            validatedSchools.add(SchoolUtils.canonicalizeSchool(sch));
+                        }
+                    }
+                }
+                if (validatedSchools.isEmpty() && !isBlank(school)) {
+                    if (!SchoolUtils.isValidSchool(school)) {
+                        throw new IllegalArgumentException("Invalid academic school: " + school);
+                    }
+                    validatedSchools.add(SchoolUtils.canonicalizeSchool(school));
+                }
+                if (validatedSchools.isEmpty()) {
                     throw new IllegalArgumentException("School is required for academic auditors.");
                 }
-                if (!SchoolUtils.isValidSchool(school)) {
-                    throw new IllegalArgumentException("Invalid academic school.");
-                }
-                school = SchoolUtils.canonicalizeSchool(school);
+                school = validatedSchools.get(0);
                 post = null;
                 if (isBlank(designation)) {
                     designation = (auditorType.substring(0, 1).toUpperCase() + auditorType.substring(1)) + " Academic Auditor";
@@ -331,14 +346,14 @@ public class UserController {
                 throw new IllegalArgumentException("Invalid category for auditor.");
             }
             
-            return new ValidatedUser(name, email, cleanPassword(password), role, school, designation, accountType, category, auditorType, auditorRole, post, administrativePosts);
+            return new ValidatedUser(name, email, cleanPassword(password), role, school, designation, accountType, category, auditorType, auditorRole, post, administrativePosts, validatedSchools);
         }
 
         if ("iqac".equals(role) || "vice-chancellor".equals(role)) {
             String reviewerDesignation = isBlank(designation)
                     ? ("iqac".equals(role) ? "IQAC" : "Vice Chancellor")
                     : designation;
-            return new ValidatedUser(name, email, cleanPassword(password), role, null, reviewerDesignation, "reviewer", null, null, null, null, List.of());
+            return new ValidatedUser(name, email, cleanPassword(password), role, null, reviewerDesignation, "reviewer", null, null, null, null, List.of(), List.of());
         }
 
         if (isBlank(category)) {
@@ -356,7 +371,7 @@ public class UserController {
                 throw new IllegalArgumentException("Invalid academic school.");
             }
             school = SchoolUtils.canonicalizeSchool(school);
-            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation, "user", "academic", null, null, null, List.of());
+            return new ValidatedUser(name, email, cleanPassword(password), "director", school, isBlank(designation) ? "Director" : designation, "user", "academic", null, null, null, List.of(), List.of());
         }
 
         if ("administrative".equals(category)) {
@@ -379,7 +394,7 @@ public class UserController {
             if (!isBlank(designation) && !mappedDesignation.equals(designation)) {
                 throw new IllegalArgumentException("Designation must match selected administrative post.");
             }
-            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation, "user", "administrative", null, null, post, List.of());
+            return new ValidatedUser(name, email, cleanPassword(password), "administrative", school, mappedDesignation, "user", "administrative", null, null, post, List.of(), List.of());
         }
 
         throw new IllegalArgumentException("Invalid category.");
@@ -571,7 +586,7 @@ public class UserController {
     private record ValidatedUser(
         String name, String email, String password, String role, String school, String designation,
         String accountType, String category, String auditorType, String auditorRole, String post,
-        List<String> administrativePosts
+        List<String> administrativePosts, List<String> schools
     ) {}
 
     @Data
