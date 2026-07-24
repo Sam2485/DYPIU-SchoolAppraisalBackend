@@ -605,5 +605,6 @@ public class UserController {
         private String auditorType;
         private String auditorRole;
         private List<String> administrativePosts;
+        private List<String> schools;
     }
 }
