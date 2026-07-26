@@ -61,4 +61,21 @@ public class SubmissionAuditorAssignment {
 
     @jakarta.persistence.Column(columnDefinition = "TEXT")
     private String attachments;
+
+    private String reviewStatus;
+
+    @Builder.Default
+    private Boolean requiresAuditorResubmission = false;
+
+    @Builder.Default
+    private Boolean correctionRequestedForAuditor = false;
+
+    @Builder.Default
+    private Boolean auditorCorrectionRequested = false;
+
+    @jakarta.persistence.Column(columnDefinition = "TEXT")
+    private String auditorCorrectionMessage;
+
+    private String auditorCorrectionRequestedBy;
+    private LocalDateTime auditorCorrectionRequestedOn;
 }

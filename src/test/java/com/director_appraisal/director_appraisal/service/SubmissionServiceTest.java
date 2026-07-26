@@ -994,7 +994,7 @@ class SubmissionServiceTest {
         req.setPostsSubmitted(List.of("hr"));
 
         when(submissionRepository.findByIdForUpdate(72L)).thenReturn(Optional.of(sub));
-        when(auditorAssignmentRepository.findBySubmissionId(72L)).thenReturn(List.of(assignment));
+        when(auditorAssignmentRepository.findBySubmissionIdAndAuditorType(72L, "internal")).thenReturn(List.of(assignment));
 
         assertThrows(SecurityException.class, () -> submissionService.submitAuditorReview(72L, auditor, req));
     }
