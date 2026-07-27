@@ -43,27 +43,78 @@ public class AcademicYearService {
         String next = normalizeYear(nextAcademicYear);
         validateNextYear(current, next);
 
+        // 1. Determine current active academic year reliably / handle multiple active years
         List<AcademicYear> activeYears = academicYearRepository.findByActiveTrue();
-        if (activeYears.size() != 1) {
-            throw new IllegalStateException("Exactly one active academic year is required");
-        }
-        AcademicYear activeYear = activeYears.get(0);
-        if (!activeYear.getYearLabel().equals(current)) {
-            throw new IllegalArgumentException("Current academic year does not match active academic year");
-        }
-        if (academicYearRepository.existsByYearLabel(next)) {
-            throw new ConflictException("Academic year already exists");
+        AcademicYear activeYear = null;
+
+        if (activeYears.isEmpty()) {
+            // If no active academic-year record exists:
+            // create or activate the currentAcademicYear from the request
+            AcademicYear existingCurrent = academicYearRepository.findByYearLabel(current).orElse(null);
+            if (existingCurrent != null) {
+                existingCurrent.setActive(true);
+                existingCurrent.setClosedAt(null);
+                activeYear = academicYearRepository.save(existingCurrent);
+            } else {
+                AcademicYear newCurrent = AcademicYear.builder()
+                        .yearLabel(current)
+                        .active(true)
+                        .startedAt(LocalDateTime.now().minusYears(1))
+                        .build();
+                activeYear = academicYearRepository.save(newCurrent);
+            }
+        } else {
+            // If multiple academic-year records are marked active:
+            // choose the record matching currentAcademicYear if present
+            for (AcademicYear ay : activeYears) {
+                if (ay.getYearLabel().equals(current)) {
+                    activeYear = ay;
+                    break;
+                }
+            }
+            if (activeYear == null) {
+                activeYear = activeYears.get(0);
+            }
+
+            // deactivate all other active academic-year records
+            for (AcademicYear ay : activeYears) {
+                if (ay.getId() != null && !ay.getId().equals(activeYear.getId())) {
+                    ay.setActive(false);
+                    ay.setClosedAt(LocalDateTime.now());
+                    academicYearRepository.save(ay);
+                }
+            }
         }
 
+        // 2. Mark currentAcademicYear as inactive/closed.
         activeYear.setActive(false);
         activeYear.setClosedAt(LocalDateTime.now());
         academicYearRepository.save(activeYear);
 
-        AcademicYear newYear = AcademicYear.builder()
-                .yearLabel(next)
-                .active(true)
-                .startedAt(LocalDateTime.now())
-                .build();
+        // Deactivate all active years just to be 100% sure we never leave more than one active academic year
+        List<AcademicYear> remainingActive = academicYearRepository.findByActiveTrue();
+        for (AcademicYear ay : remainingActive) {
+            ay.setActive(false);
+            if (ay.getClosedAt() == null) {
+                ay.setClosedAt(LocalDateTime.now());
+            }
+            academicYearRepository.save(ay);
+        }
+
+        // 3. Create or activate nextAcademicYear.
+        // Mark nextAcademicYear as the only active academic year.
+        AcademicYear newYear = academicYearRepository.findByYearLabel(next).orElse(null);
+        if (newYear == null) {
+            newYear = AcademicYear.builder()
+                    .yearLabel(next)
+                    .active(true)
+                    .startedAt(LocalDateTime.now())
+                    .build();
+        } else {
+            newYear.setActive(true);
+            newYear.setClosedAt(null);
+            newYear.setStartedAt(LocalDateTime.now());
+        }
         academicYearRepository.save(newYear);
 
         int academicFormsCreated = 0;
@@ -76,7 +127,19 @@ public class AcademicYearService {
                 if (school == null || school.isBlank()) {
                     continue;
                 }
-                if (!submissionRepository.existsByEmailAndAuditTypeAndAcademicYearAndVersion(user.getEmail(), "academic", next, 1)) {
+                Submission existing = submissionRepository.findByEmailAndAuditTypeAndAcademicYearAndVersion(user.getEmail(), "academic", next, 1).orElse(null);
+                if (existing != null) {
+                    if (resetActiveForms && !List.of("APPROVED", "FINAL").contains(existing.getStatus().toUpperCase())) {
+                        existing.setStatus("DRAFT");
+                        existing.setValuesData("{}");
+                        existing.setTablesData("{}");
+                        existing.setAttachments("[]");
+                        existing.setSubmittedAt(null);
+                        existing.setAuditorReviewedOn(null);
+                        existing.setAuditorReviewedBy(null);
+                        submissionRepository.save(existing);
+                    }
+                } else {
                     createBlankV1(user, "academic", school, null, next);
                     academicFormsCreated++;
                 }
@@ -85,7 +148,19 @@ public class AcademicYearService {
                 if (post == null || post.isBlank()) {
                     continue;
                 }
-                if (!submissionRepository.existsByEmailAndAuditTypeAndAcademicYearAndVersion(user.getEmail(), "administrative", next, 1)) {
+                Submission existing = submissionRepository.findByEmailAndAuditTypeAndAcademicYearAndVersion(user.getEmail(), "administrative", next, 1).orElse(null);
+                if (existing != null) {
+                    if (resetActiveForms && !List.of("APPROVED", "FINAL").contains(existing.getStatus().toUpperCase())) {
+                        existing.setStatus("DRAFT");
+                        existing.setValuesData("{}");
+                        existing.setTablesData("{}");
+                        existing.setAttachments("[]");
+                        existing.setSubmittedAt(null);
+                        existing.setAuditorReviewedOn(null);
+                        existing.setAuditorReviewedBy(null);
+                        submissionRepository.save(existing);
+                    }
+                } else {
                     createBlankV1(user, "administrative", "Administrative Office", post, next);
                     administrativeFormsCreated++;
                 }
@@ -93,11 +168,18 @@ public class AcademicYearService {
         }
 
         Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", true);
         response.put("academicYear", next);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("academicYear", next);
+        response.put("data", data);
+
+        // Keep existing fields for backward compatibility
         response.put("auditCycle", toAuditCycle(next));
         response.put("previousAcademicYear", current);
         response.put("academicFormsCreated", academicFormsCreated);
         response.put("administrativeFormsCreated", administrativeFormsCreated);
+
         return response;
     }
 

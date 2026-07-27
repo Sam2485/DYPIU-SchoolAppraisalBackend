@@ -1,6 +1,5 @@
 package com.director_appraisal.director_appraisal.service;
 
-import com.director_appraisal.director_appraisal.exception.ConflictException;
 import com.director_appraisal.director_appraisal.model.AcademicYear;
 import com.director_appraisal.director_appraisal.model.Submission;
 import com.director_appraisal.director_appraisal.model.User;
@@ -19,6 +18,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.verify;
@@ -61,9 +61,10 @@ class AcademicYearServiceTest {
                 .build();
 
         when(academicYearRepository.findByActiveTrue()).thenReturn(List.of(current));
-        when(academicYearRepository.existsByYearLabel("2026-2027")).thenReturn(false);
+        when(academicYearRepository.findByYearLabel("2026-2027")).thenReturn(Optional.empty());
         when(userRepository.findAll()).thenReturn(List.of(director, registrar));
-        when(submissionRepository.existsByEmailAndAuditTypeAndAcademicYearAndVersion(any(), any(), any(), any())).thenReturn(false);
+        when(submissionRepository.findByEmailAndAuditTypeAndAcademicYearAndVersion(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
         when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> {
             Submission saved = invocation.getArgument(0);
             if (saved.getId() == null) {
@@ -71,6 +72,7 @@ class AcademicYearServiceTest {
             }
             return saved;
         });
+        when(academicYearRepository.save(any(AcademicYear.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Map<String, Object> response = academicYearService.startNextAcademicYear(
                 "2025-2026",
@@ -88,24 +90,55 @@ class AcademicYearServiceTest {
     }
 
     @Test
-    void rejectsDuplicateAcademicYearCreation() {
+    void idempotentNextAcademicYearReuse() {
         AcademicYear current = AcademicYear.builder()
                 .id(1L)
                 .yearLabel("2025-2026")
                 .active(true)
                 .build();
+        AcademicYear nextYearObj = AcademicYear.builder()
+                .id(2L)
+                .yearLabel("2026-2027")
+                .active(false)
+                .build();
         User vc = User.builder().role("vice-chancellor").build();
 
         when(academicYearRepository.findByActiveTrue()).thenReturn(List.of(current));
-        when(academicYearRepository.existsByYearLabel("2026-2027")).thenReturn(true);
+        when(academicYearRepository.findByYearLabel("2026-2027")).thenReturn(Optional.of(nextYearObj));
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(academicYearRepository.save(any(AcademicYear.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(ConflictException.class, () -> academicYearService.startNextAcademicYear(
+        Map<String, Object> response = academicYearService.startNextAcademicYear(
                 "2025-2026",
                 "2026-2027",
                 true,
                 true,
                 vc
-        ));
+        );
+
+        assertEquals("2026-2027", response.get("academicYear"));
+        assertTrue(nextYearObj.getActive());
+    }
+
+    @Test
+    void handlesNoActiveAcademicYearsByActivatingCurrent() {
+        User iqac = User.builder().role("iqac").build();
+
+        when(academicYearRepository.findByActiveTrue()).thenReturn(List.of());
+        when(academicYearRepository.findByYearLabel("2025-2026")).thenReturn(Optional.empty());
+        when(academicYearRepository.findByYearLabel("2026-2027")).thenReturn(Optional.empty());
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(academicYearRepository.save(any(AcademicYear.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> response = academicYearService.startNextAcademicYear(
+                "2025-2026",
+                "2026-2027",
+                true,
+                true,
+                iqac
+        );
+
+        assertEquals("2026-2027", response.get("academicYear"));
     }
 
     @Test
