@@ -728,20 +728,13 @@ public class SubmissionService {
             List<SubmissionAuditorAssignment> allAssignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
             String forwardedType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "internal";
 
-            boolean isCompleted = false;
-            if ("academic".equalsIgnoreCase(submission.getAuditType())) {
-                List<SubmissionAuditorAssignment> stageAssignments = allAssignments.stream()
-                        .filter(a -> "academic".equalsIgnoreCase(a.getCategory()) && forwardedType.equalsIgnoreCase(a.getAuditorType()))
-                        .toList();
-                long total = stageAssignments.size();
-                long completed = stageAssignments.stream()
-                        .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()) && !Boolean.TRUE.equals(a.getRequiresAuditorResubmission()))
-                        .count();
-                isCompleted = (total > 0 && completed == total) || (total == 0);
-            } else {
-                List<SubmissionAuditorAssignment> stageAssignments = allAssignments.stream()
-                        .filter(a -> a.getAuditorType() != null && a.getAuditorType().trim().toLowerCase().equals(forwardedType))
-                        .collect(java.util.stream.Collectors.toList());
+            List<SubmissionAuditorAssignment> stageAssignments = allAssignments.stream()
+                    .filter(a -> forwardedType.equalsIgnoreCase(a.getAuditorType()))
+                    .toList();
+            if (stageAssignments.isEmpty()) {
+                stageAssignments = allAssignments;
+            }
+            if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
                 java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
                 stageAssignments = stageAssignments.stream()
                         .filter(a -> {
@@ -749,11 +742,13 @@ public class SubmissionService {
                             return postCanonical != null && validAdminPosts.contains(postCanonical);
                         })
                         .collect(java.util.stream.Collectors.toList());
-                int total = stageAssignments.size();
-                int submitted = (int) stageAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
-                int pending = total - submitted;
-                isCompleted = (total > 0 && pending == 0) || (total == 0);
             }
+
+            long total = stageAssignments.size();
+            long completed = stageAssignments.stream()
+                    .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()) && !Boolean.TRUE.equals(a.getRequiresAuditorResubmission()))
+                    .count();
+            boolean isCompleted = (total > 0 && completed == total) || (total == 0);
 
             if (isCompleted) {
                 if (!"AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus())) {
@@ -1187,7 +1182,7 @@ public class SubmissionService {
         return updateSubmission(id, caller, status, forwardedAuditorType, forwardedAuditCategory,
                 requestForwardedToAuditorIds, requestForwardedToAuditorNames, requestForwardedToAuditorEmails,
                 valuesData, tablesData, attachments, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional
@@ -1202,7 +1197,7 @@ public class SubmissionService {
         return updateSubmission(id, caller, status, forwardedAuditorType, forwardedAuditCategory,
                 requestForwardedToAuditorIds, requestForwardedToAuditorNames, requestForwardedToAuditorEmails,
                 valuesData, tablesData, attachments, forwardedAdministrativePosts, forwardedToAuditorPosts,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional
@@ -1223,6 +1218,33 @@ public class SubmissionService {
                                        String auditorCorrectionRequestedOn,
                                        String auditorResubmittedAt,
                                        String remarks) {
+        return updateSubmission(id, caller, status, forwardedAuditorType, forwardedAuditCategory,
+                requestForwardedToAuditorIds, requestForwardedToAuditorNames, requestForwardedToAuditorEmails,
+                valuesData, tablesData, attachments, forwardedAdministrativePosts, forwardedToAuditorPosts,
+                auditorCorrectionRequested, correctionRequestedForAuditor, requiresAuditorResubmission,
+                auditorCorrectionMessage, auditorCorrectionRequestedBy, auditorCorrectionRequestedByRole,
+                auditorCorrectionRequestedOn, auditorResubmittedAt, remarks, null);
+    }
+
+    @Transactional
+    public Submission updateSubmission(Long id, User caller, String status, String forwardedAuditorType,
+                                       String forwardedAuditCategory,
+                                       List<Long> requestForwardedToAuditorIds,
+                                       List<String> requestForwardedToAuditorNames,
+                                       List<String> requestForwardedToAuditorEmails,
+                                       String valuesData, String tablesData, String attachments,
+                                       List<String> forwardedAdministrativePosts,
+                                       List<String> forwardedToAuditorPosts,
+                                       Boolean auditorCorrectionRequested,
+                                       Boolean correctionRequestedForAuditor,
+                                       Boolean requiresAuditorResubmission,
+                                       String auditorCorrectionMessage,
+                                       String auditorCorrectionRequestedBy,
+                                       String auditorCorrectionRequestedByRole,
+                                       String auditorCorrectionRequestedOn,
+                                       String auditorResubmittedAt,
+                                       String remarks,
+                                       List<String> selectedAssignmentKeys) {
         Submission submission = submissionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found with ID: " + id));
 
@@ -1337,31 +1359,34 @@ public class SubmissionService {
                         submission.setAuditorCorrectionRequestedBy(auditorCorrectionRequestedBy);
                         submission.setAuditorCorrectionRequestedByRole(auditorCorrectionRequestedByRole);
                         submission.setAuditorCorrectionRequestedOn(parseDateTime(auditorCorrectionRequestedOn));
-                        if (remarks != null) {
-                            submission.setRemarks(remarks);
-                        }
 
-                        if ("academic".equalsIgnoreCase(submission.getAuditType())) {
-                            String targetAuditorType = determineActiveAuditorTypeForReturn(submission, forwardedAuditorType);
-                            List<SubmissionAuditorAssignment> assignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
-                            for (SubmissionAuditorAssignment assignment : assignments) {
-                                boolean matches = "academic".equalsIgnoreCase(assignment.getCategory())
-                                        && targetAuditorType.equalsIgnoreCase(assignment.getAuditorType());
-                                if (matches) {
-                                    assignment.setStatus("PENDING");
-                                    assignment.setReviewStatus("pending");
-                                    assignment.setRequiresAuditorResubmission(true);
-                                    assignment.setCorrectionRequestedForAuditor(true);
-                                    assignment.setAuditorCorrectionRequested(true);
-                                    assignment.setAuditorCorrectionMessage(auditorCorrectionMessage != null ? auditorCorrectionMessage : remarks);
-                                    assignment.setAuditorCorrectionRequestedBy(auditorCorrectionRequestedBy);
-                                    if (auditorCorrectionRequestedOn != null && !auditorCorrectionRequestedOn.isBlank()) {
-                                        assignment.setAuditorCorrectionRequestedOn(parseDateTime(auditorCorrectionRequestedOn));
-                                    } else {
-                                        assignment.setAuditorCorrectionRequestedOn(LocalDateTime.now());
-                                    }
-                                    auditorAssignmentRepository.save(assignment);
+                        String targetAuditorType = determineActiveAuditorTypeForReturn(submission, forwardedAuditorType);
+                        List<SubmissionAuditorAssignment> assignments = auditorAssignmentRepository.findBySubmissionId(submission.getId());
+                        for (SubmissionAuditorAssignment assignment : assignments) {
+                            boolean matches = targetAuditorType.equalsIgnoreCase(assignment.getAuditorType());
+                            if (!matches) {
+                                continue;
+                            }
+                            boolean selected = isAssignmentSelectedForCorrection(
+                                    assignment,
+                                    selectedAssignmentKeys,
+                                    requestForwardedToAuditorIds,
+                                    requestForwardedToAuditorEmails
+                            );
+                            if (selected) {
+                                assignment.setStatus("PENDING");
+                                assignment.setReviewStatus("pending");
+                                assignment.setRequiresAuditorResubmission(true);
+                                assignment.setCorrectionRequestedForAuditor(true);
+                                assignment.setAuditorCorrectionRequested(true);
+                                assignment.setAuditorCorrectionMessage(auditorCorrectionMessage != null ? auditorCorrectionMessage : remarks);
+                                assignment.setAuditorCorrectionRequestedBy(auditorCorrectionRequestedBy);
+                                if (auditorCorrectionRequestedOn != null && !auditorCorrectionRequestedOn.isBlank()) {
+                                    assignment.setAuditorCorrectionRequestedOn(parseDateTime(auditorCorrectionRequestedOn));
+                                } else {
+                                    assignment.setAuditorCorrectionRequestedOn(LocalDateTime.now());
                                 }
+                                auditorAssignmentRepository.save(assignment);
                             }
                         }
                     } else {
@@ -3564,12 +3589,10 @@ public class SubmissionService {
                 assignment.setValuesData(request.getValuesData());
                 assignment.setTablesData(request.getTablesData());
                 assignment.setAttachments(request.getAttachments());
-                if ("academic".equalsIgnoreCase(submission.getAuditType())) {
-                    assignment.setReviewStatus("submitted");
-                    assignment.setRequiresAuditorResubmission(false);
-                    assignment.setCorrectionRequestedForAuditor(false);
-                    assignment.setAuditorCorrectionRequested(false);
-                }
+                assignment.setReviewStatus("submitted");
+                assignment.setRequiresAuditorResubmission(false);
+                assignment.setCorrectionRequestedForAuditor(false);
+                assignment.setAuditorCorrectionRequested(false);
                 auditorAssignmentRepository.save(assignment);
             }
         }
@@ -3619,24 +3642,31 @@ public class SubmissionService {
         }
         
         boolean allSubmitted = false;
-        if ("academic".equalsIgnoreCase(submission.getAuditType())) {
-            String currentType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "internal";
-            List<SubmissionAuditorAssignment> currentGroupAssignments = allAssignmentsInDb.stream()
-                    .filter(a -> "academic".equalsIgnoreCase(a.getCategory()) && currentType.equalsIgnoreCase(a.getAuditorType()))
-                    .toList();
+        String currentType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "internal";
+        List<SubmissionAuditorAssignment> currentGroupAssignments = allAssignmentsInDb.stream()
+                .filter(a -> currentType.equalsIgnoreCase(a.getAuditorType()))
+                .toList();
 
-            long totalGroup = currentGroupAssignments.size();
-            long completedGroup = currentGroupAssignments.stream()
-                    .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()) && !Boolean.TRUE.equals(a.getRequiresAuditorResubmission()))
-                    .count();
-
-            allSubmitted = (totalGroup > 0 && completedGroup == totalGroup) || (totalGroup == 0);
-        } else {
-            int total = validAssignments.size();
-            int submitted = (int) validAssignments.stream().filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus())).count();
-            int pending = total - submitted;
-            allSubmitted = (total > 0 && pending == 0) || (total == 0);
+        if (currentGroupAssignments.isEmpty()) {
+            currentGroupAssignments = allAssignmentsInDb;
         }
+
+        if ("administrative".equalsIgnoreCase(submission.getAuditType())) {
+            java.util.Set<String> validAdminPosts = java.util.Set.of("registrar", "hr", "dean-placement", "dean-student-welfare");
+            currentGroupAssignments = currentGroupAssignments.stream()
+                    .filter(a -> {
+                        String postCanonical = canonicalAdministrativePost(a.getPost());
+                        return postCanonical != null && validAdminPosts.contains(postCanonical);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        long totalGroup = currentGroupAssignments.size();
+        long completedGroup = currentGroupAssignments.stream()
+                .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()) && !Boolean.TRUE.equals(a.getRequiresAuditorResubmission()))
+                .count();
+
+        allSubmitted = (totalGroup > 0 && completedGroup == totalGroup) || (totalGroup == 0);
 
         if (allSubmitted) {
             submission.setStatus("AUDITOR_COMPLETED");
@@ -3652,21 +3682,16 @@ public class SubmissionService {
             submission.setAuditorResubmittedAt(submittedAt);
         } else {
             submission.setStatus("UNDER_REVIEW");
-            if ("academic".equalsIgnoreCase(submission.getAuditType())) {
-                String currentType = submission.getForwardedAuditorType() != null ? submission.getForwardedAuditorType().trim().toLowerCase() : "internal";
-                List<SubmissionAuditorAssignment> currentGroupAssignments = allAssignmentsInDb.stream()
-                        .filter(a -> "academic".equalsIgnoreCase(a.getCategory()) && currentType.equalsIgnoreCase(a.getAuditorType()))
-                        .toList();
-                boolean anyPendingCorrection = currentGroupAssignments.stream().anyMatch(a -> Boolean.TRUE.equals(a.getRequiresAuditorResubmission()));
-                if (anyPendingCorrection) {
-                    submission.setAuditorCorrectionRequested(true);
-                    submission.setCorrectionRequestedForAuditor(true);
-                    submission.setRequiresAuditorResubmission(true);
-                } else {
-                    submission.setAuditorCorrectionRequested(false);
-                    submission.setCorrectionRequestedForAuditor(false);
-                    submission.setRequiresAuditorResubmission(false);
-                }
+            boolean anyPendingCorrection = currentGroupAssignments.stream()
+                    .anyMatch(a -> Boolean.TRUE.equals(a.getRequiresAuditorResubmission()));
+            if (anyPendingCorrection) {
+                submission.setAuditorCorrectionRequested(true);
+                submission.setCorrectionRequestedForAuditor(true);
+                submission.setRequiresAuditorResubmission(true);
+            } else {
+                submission.setAuditorCorrectionRequested(false);
+                submission.setCorrectionRequestedForAuditor(false);
+                submission.setRequiresAuditorResubmission(false);
             }
         }
         
@@ -3933,6 +3958,49 @@ public class SubmissionService {
             return submission.getReportCategory().trim().toLowerCase();
         }
         return "internal";
+    }
+
+    private boolean isAssignmentSelectedForCorrection(SubmissionAuditorAssignment a,
+                                                      List<String> selectedAssignmentKeys,
+                                                      List<Long> requestForwardedToAuditorIds,
+                                                      List<String> requestForwardedToAuditorEmails) {
+        // 1. Match by assignment key first
+        if (selectedAssignmentKeys != null && !selectedAssignmentKeys.isEmpty()) {
+            String postKey = a.getPost() != null ? a.getPost() : "academic";
+            String constructedKey = a.getSubmissionId() + "-" + a.getAuditorId() + "-" + postKey;
+            
+            for (String selKey : selectedAssignmentKeys) {
+                if (constructedKey.equalsIgnoreCase(selKey)) {
+                    return true;
+                }
+                if (selKey != null && selKey.equalsIgnoreCase(a.getId() != null ? a.getId().toString() : "")) {
+                    return true;
+                }
+            }
+        }
+        
+        // 2. Then match by auditorId
+        if (requestForwardedToAuditorIds != null && !requestForwardedToAuditorIds.isEmpty()) {
+            if (a.getAuditorId() != null && requestForwardedToAuditorIds.contains(a.getAuditorId())) {
+                return true;
+            }
+        }
+        
+        // 3. Match by auditorEmail only as fallback when id/key is missing/empty
+        boolean keyOrIdProvided = (selectedAssignmentKeys != null && !selectedAssignmentKeys.isEmpty())
+                || (requestForwardedToAuditorIds != null && !requestForwardedToAuditorIds.isEmpty());
+                
+        if (!keyOrIdProvided && requestForwardedToAuditorEmails != null && !requestForwardedToAuditorEmails.isEmpty()) {
+            if (a.getAuditorEmail() != null) {
+                for (String email : requestForwardedToAuditorEmails) {
+                    if (a.getAuditorEmail().equalsIgnoreCase(email)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
     }
 
     @Transactional

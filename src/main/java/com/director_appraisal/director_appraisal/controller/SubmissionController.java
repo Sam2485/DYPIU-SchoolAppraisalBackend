@@ -173,6 +173,17 @@ public class SubmissionController {
             );
             return ResponseEntity.ok(updated);
         }
+        List<String> selectedKeys = request.getCorrectionAssignmentKeys();
+        if (selectedKeys == null || selectedKeys.isEmpty()) {
+            selectedKeys = request.getAuditorAssignmentKeys();
+        }
+        if (selectedKeys == null || selectedKeys.isEmpty()) {
+            selectedKeys = request.getAssignmentKeys();
+        }
+        if (selectedKeys == null || selectedKeys.isEmpty()) {
+            selectedKeys = request.getReturnedAuditorAssignmentKeys();
+        }
+
         Submission updated = submissionService.updateSubmission(
                 id,
                 user,
@@ -195,7 +206,8 @@ public class SubmissionController {
                 request.getAuditorCorrectionRequestedByRole(),
                 request.getAuditorCorrectionRequestedOn(),
                 request.getAuditorResubmittedAt(),
-                request.getRemarks()
+                request.getRemarks(),
+                selectedKeys
         );
         return ResponseEntity.ok(updated);
     }
@@ -342,6 +354,10 @@ public class SubmissionController {
         private List<String> forwardedToAuditorEmails;
         private List<String> forwardedAdministrativePosts;
         private List<String> forwardedToAuditorPosts;
+        private List<String> assignmentKeys;
+        private List<String> auditorAssignmentKeys;
+        private List<String> correctionAssignmentKeys;
+        private List<String> returnedAuditorAssignmentKeys;
         private Boolean auditorCorrectionRequested;
         private Boolean correctionRequestedForAuditor;
         private Boolean requiresAuditorResubmission;

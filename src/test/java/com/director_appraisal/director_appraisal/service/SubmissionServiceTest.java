@@ -1050,4 +1050,71 @@ class SubmissionServiceTest {
         assertEquals("PENDING", assignment2.getStatus());
         assertEquals("UNDER_REVIEW", sub.getStatus());
     }
+
+    @Test
+    void testReturnToAuditorOnlyAppliesForSelectedAssignments() {
+        Submission sub = Submission.builder()
+                .id(72L)
+                .email("owner@dypiu.ac.in")
+                .auditType("academic")
+                .status("UNDER_REVIEW")
+                .forwardedAuditorType("internal")
+                .valuesData("{}")
+                .tablesData("{}")
+                .attachments("[]")
+                .build();
+        User iqac = User.builder()
+                .id(1L)
+                .email("iqac@dypiu.ac.in")
+                .role("iqac")
+                .build();
+
+        SubmissionAuditorAssignment assignment1 = SubmissionAuditorAssignment.builder()
+                .id(1L)
+                .submissionId(72L)
+                .auditorId(201L)
+                .auditorEmail("ia1@dypiu.ac.in")
+                .auditorType("internal")
+                .post("academic")
+                .category("academic")
+                .status("SUBMITTED")
+                .reviewStatus("submitted")
+                .requiresAuditorResubmission(false)
+                .build();
+
+        SubmissionAuditorAssignment assignment2 = SubmissionAuditorAssignment.builder()
+                .id(2L)
+                .submissionId(72L)
+                .auditorId(202L)
+                .auditorEmail("ia2@dypiu.ac.in")
+                .auditorType("internal")
+                .post("academic")
+                .category("academic")
+                .status("SUBMITTED")
+                .reviewStatus("submitted")
+                .requiresAuditorResubmission(false)
+                .build();
+
+        when(submissionRepository.findById(72L)).thenReturn(Optional.of(sub));
+        when(auditorAssignmentRepository.findBySubmissionId(72L)).thenReturn(List.of(assignment1, assignment2));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(i -> i.getArgument(0));
+
+        submissionService.updateSubmission(
+                72L, iqac, "UNDER_REVIEW", "internal", null,
+                null, null, null,
+                "{}", "{}", "[]",
+                null, null,
+                true, true, true,
+                "Please correct Section B", "IQAC User", "iqac",
+                null, null, null,
+                List.of("72-201-academic")
+        );
+
+        assertEquals("PENDING", assignment1.getStatus());
+        assertTrue(assignment1.getRequiresAuditorResubmission());
+        assertEquals("Please correct Section B", assignment1.getAuditorCorrectionMessage());
+
+        assertEquals("SUBMITTED", assignment2.getStatus());
+        assertFalse(assignment2.getRequiresAuditorResubmission());
+    }
 }
