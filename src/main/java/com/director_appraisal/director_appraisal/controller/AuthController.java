@@ -33,7 +33,7 @@ public class AuthController {
     @org.springframework.beans.factory.annotation.Value("${app.gcp.enabled:false}")
     private boolean gcpEnabled;
 
-    @org.springframework.beans.factory.annotation.Value("${app.mfa.enabled:false}")
+    @org.springframework.beans.factory.annotation.Value("${app.mfa.enabled:${APP_MFA_ENABLED:${MFA_ENABLED:false}}}")
     private boolean mfaEnabled;
 
     @PostMapping("/login")
