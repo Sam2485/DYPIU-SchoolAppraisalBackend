@@ -33,6 +33,9 @@ public class AuthController {
     @org.springframework.beans.factory.annotation.Value("${app.gcp.enabled:false}")
     private boolean gcpEnabled;
 
+    @org.springframework.beans.factory.annotation.Value("${app.mfa.enabled:false}")
+    private boolean mfaEnabled;
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
         if (loginRequest == null || loginRequest.getUsername() == null || loginRequest.getPassword() == null) {
@@ -71,16 +74,23 @@ public class AuthController {
                     .body(Map.of("message", "Invalid email address or password."));
         }
 
-        String loginSessionId = mfaService.createMfaSession(user);
+        if (mfaEnabled) {
+            String loginSessionId = mfaService.createMfaSession(user);
 
-        return ResponseEntity.ok()
-                .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
-                .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
-                .body(Map.of(
-                        "mfaRequired", true,
-                        "loginSessionId", loginSessionId,
-                        "expiresIn", 300
-                ));
+            return ResponseEntity.ok()
+                    .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                    .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                    .body(Map.of(
+                            "mfaRequired", true,
+                            "loginSessionId", loginSessionId,
+                            "expiresIn", 300
+                    ));
+        } else {
+            return ResponseEntity.ok()
+                    .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                    .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                    .body(buildLoginResponseBody(user));
+        }
     }
 
     @PostMapping("/verify-otp")
@@ -94,7 +104,7 @@ public class AuthController {
             User user = userService.findById(userId)
                     .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
-            return buildLoginResponse(user);
+            return ResponseEntity.ok(buildLoginResponseBody(user));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
@@ -137,7 +147,7 @@ public class AuthController {
         }
     }
 
-    private ResponseEntity<LoginResponse> buildLoginResponse(User user) {
+    private LoginResponse buildLoginResponseBody(User user) {
         String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
         java.util.List<String> administrativePosts = getAdministrativePosts(user);
         String canonicalPost = canonicalAdministrativePost(user.getPost());
@@ -155,7 +165,7 @@ public class AuthController {
 
         String token = jwtService.generateToken(user, claims);
 
-        return ResponseEntity.ok(new LoginResponse(
+        return new LoginResponse(
                 token,
                 user.getEmail(),
                 user.getName(),
@@ -171,7 +181,7 @@ public class AuthController {
                 canonicalPost,
                 currentAcademicYear,
                 administrativePosts
-        ));
+        );
     }
 
     @PostMapping("/forgot-password")
