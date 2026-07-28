@@ -7,6 +7,7 @@ import com.director_appraisal.director_appraisal.service.AcademicYearService;
 import com.director_appraisal.director_appraisal.service.JwtService;
 import com.director_appraisal.director_appraisal.service.UserService;
 import com.director_appraisal.director_appraisal.service.RateLimiterService;
+import com.director_appraisal.director_appraisal.service.MfaService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,8 @@ public class AuthController {
     private final AcademicYearService academicYearService;
     private final UserAdministrativePostRepository userAdministrativePostRepository;
     private final RateLimiterService rateLimiterService;
+    private final MfaService mfaService;
+    private final com.director_appraisal.director_appraisal.repository.MfaLoginSessionRepository mfaLoginSessionRepository;
     private final jakarta.servlet.http.HttpServletRequest httpServletRequest;
 
     @org.springframework.beans.factory.annotation.Value("${app.gcp.enabled:false}")
@@ -68,8 +71,74 @@ public class AuthController {
                     .body(Map.of("message", "Invalid email address or password."));
         }
 
-        String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
+        String loginSessionId = mfaService.createMfaSession(user);
 
+        return ResponseEntity.ok()
+                .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
+                .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
+                .body(Map.of(
+                        "mfaRequired", true,
+                        "loginSessionId", loginSessionId,
+                        "expiresIn", 300
+                ));
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@RequestBody VerifyOtpRequest verifyRequest) {
+        if (verifyRequest == null || verifyRequest.getLoginSessionId() == null || verifyRequest.getOtp() == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "loginSessionId and otp are required."));
+        }
+
+        try {
+            Long userId = mfaService.verifyOtp(verifyRequest.getLoginSessionId().trim(), verifyRequest.getOtp().trim());
+            User user = userService.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+            return buildLoginResponse(user);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(429).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", safeMessage(e, "Verification failed.")));
+        }
+    }
+
+    @PostMapping("/resend-otp")
+    public ResponseEntity<?> resendOtp(@RequestBody ResendOtpRequest resendRequest) {
+        if (resendRequest == null || resendRequest.getLoginSessionId() == null || resendRequest.getLoginSessionId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "loginSessionId is required."));
+        }
+
+        String clientIp = rateLimiterService.getClientIp(httpServletRequest);
+        String ipKey = "resend:ip:" + clientIp;
+        String sessionKey = "resend:session:" + resendRequest.getLoginSessionId();
+
+        RateLimiterService.RateLimitResult rateLimitResult = rateLimiterService.checkLimit(ipKey, sessionKey, "resend");
+        if (!rateLimitResult.allowed) {
+            return ResponseEntity.status(429)
+                    .header("Retry-After", String.valueOf(rateLimitResult.retryAfter))
+                    .body(Map.of("message", "Too many resend requests. Please try again after one minute."));
+        }
+
+        try {
+            com.director_appraisal.director_appraisal.model.MfaLoginSession session = mfaLoginSessionRepository
+                    .findById(resendRequest.getLoginSessionId().trim())
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid login session."));
+            User user = userService.findById(session.getUserId())
+                    .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+            mfaService.resendOtp(resendRequest.getLoginSessionId().trim(), user.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Verification code resent successfully.", "expiresIn", 300));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", safeMessage(e, "Could not resend verification code.")));
+        }
+    }
+
+    private ResponseEntity<LoginResponse> buildLoginResponse(User user) {
+        String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
         java.util.List<String> administrativePosts = getAdministrativePosts(user);
         String canonicalPost = canonicalAdministrativePost(user.getPost());
         String role = user.getRole();
@@ -84,29 +153,25 @@ public class AuthController {
         putClaim(claims, "currentAcademicYear", currentAcademicYear);
         claims.put("administrativePosts", administrativePosts);
 
-        // Generate JWT Token
         String token = jwtService.generateToken(user, claims);
 
-        return ResponseEntity.ok()
-                .header("X-RateLimit-Limit", String.valueOf(rateLimitResult.limit))
-                .header("X-RateLimit-Remaining", String.valueOf(rateLimitResult.remaining))
-                .body(new LoginResponse(
-                        token,
-                        user.getEmail(),
-                        user.getName(),
-                        user.getDesignation(),
-                        school,
-                        role,
-                        user.getId(),
-                        user.getId(),
-                        user.getAccountType(),
-                        user.getCategory(),
-                        user.getAuditorType(),
-                        user.getAuditorRole(),
-                        canonicalPost,
-                        currentAcademicYear,
-                        administrativePosts
-                ));
+        return ResponseEntity.ok(new LoginResponse(
+                token,
+                user.getEmail(),
+                user.getName(),
+                user.getDesignation(),
+                school,
+                role,
+                user.getId(),
+                user.getId(),
+                user.getAccountType(),
+                user.getCategory(),
+                user.getAuditorType(),
+                user.getAuditorRole(),
+                canonicalPost,
+                currentAcademicYear,
+                administrativePosts
+        ));
     }
 
     @PostMapping("/forgot-password")
@@ -187,6 +252,17 @@ public class AuthController {
     public static class LoginRequest {
         private String username;
         private String password;
+    }
+
+    @Data
+    public static class VerifyOtpRequest {
+        private String loginSessionId;
+        private String otp;
+    }
+
+    @Data
+    public static class ResendOtpRequest {
+        private String loginSessionId;
     }
 
     @Data
