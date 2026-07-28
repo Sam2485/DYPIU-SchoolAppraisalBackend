@@ -33,8 +33,20 @@ public class AuthController {
     @org.springframework.beans.factory.annotation.Value("${app.gcp.enabled:false}")
     private boolean gcpEnabled;
 
-    @org.springframework.beans.factory.annotation.Value("${app.mfa.enabled:${APP_MFA_ENABLED:${MFA_ENABLED:false}}}")
-    private boolean mfaEnabled;
+    @org.springframework.beans.factory.annotation.Value("${app.mfa.enabled:false}")
+    private String mfaEnabledProp;
+
+    private boolean isMfaEnabled() {
+        String envVal = System.getenv("APP_MFA_ENABLED");
+        if (envVal != null && !envVal.isBlank()) {
+            return "true".equalsIgnoreCase(envVal.trim());
+        }
+        String mfaEnvVal = System.getenv("MFA_ENABLED");
+        if (mfaEnvVal != null && !mfaEnvVal.isBlank()) {
+            return "true".equalsIgnoreCase(mfaEnvVal.trim());
+        }
+        return "true".equalsIgnoreCase(mfaEnabledProp);
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
@@ -74,7 +86,7 @@ public class AuthController {
                     .body(Map.of("message", "Invalid email address or password."));
         }
 
-        if (mfaEnabled) {
+        if (isMfaEnabled()) {
             String loginSessionId = mfaService.createMfaSession(user);
 
             return ResponseEntity.ok()
