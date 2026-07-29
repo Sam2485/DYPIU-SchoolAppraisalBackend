@@ -61,18 +61,46 @@ public class LocalFileStorageService implements StorageService {
     @Override
     public InputStream downloadFile(String objectName) throws IOException {
         Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
-        Path targetLocation = uploadDir.resolve(objectName).normalize();
+        
+        String cleanPath = objectName == null ? "" : objectName;
+        if (cleanPath.contains("users/")) {
+            cleanPath = cleanPath.substring(cleanPath.indexOf("users/"));
+        } else if (cleanPath.contains("uploads/")) {
+            cleanPath = cleanPath.substring(cleanPath.indexOf("uploads/") + "uploads/".length());
+        }
+        
+        Path targetLocation = uploadDir.resolve(cleanPath).normalize();
         
         // Safety check to prevent Directory Traversal attacks
-        if (!targetLocation.startsWith(uploadDir)) {
-            throw new IllegalArgumentException("Invalid attachment path: " + objectName);
+        if (targetLocation.startsWith(uploadDir) && Files.exists(targetLocation)) {
+            return Files.newInputStream(targetLocation);
         }
 
-        if (!Files.exists(targetLocation)) {
-            throw new IOException("File not found locally: " + targetLocation);
+        // Try direct objectName resolution if cleanPath didn't exist
+        Path directLocation = uploadDir.resolve(objectName).normalize();
+        if (directLocation.startsWith(uploadDir) && Files.exists(directLocation)) {
+            return Files.newInputStream(directLocation);
         }
 
-        return Files.newInputStream(targetLocation);
+        // Fallback: Search for the exact filename anywhere under uploadDir
+        try {
+            String fileName = Paths.get(objectName).getFileName().toString();
+            if (fileName != null && !fileName.isBlank()) {
+                try (java.util.stream.Stream<Path> walk = Files.walk(uploadDir)) {
+                    java.util.Optional<Path> found = walk
+                            .filter(Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().equalsIgnoreCase(fileName))
+                            .findFirst();
+                    if (found.isPresent()) {
+                        return Files.newInputStream(found.get());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Fallback search error ignored
+        }
+
+        throw new IOException("File not found locally: " + targetLocation);
     }
 
     @Override

@@ -689,6 +689,10 @@ public class SubmissionController {
         if (url == null || url.isBlank()) {
             return null;
         }
+        if (url.contains("users/")) {
+            int idx = url.indexOf("users/");
+            return url.substring(idx);
+        }
         if (url.contains("/uploads/")) {
             int idx = url.indexOf("/uploads/");
             return url.substring(idx + "/uploads/".length());
@@ -699,16 +703,16 @@ public class SubmissionController {
             if (path == null || path.isBlank()) {
                 return null;
             }
+            if (path.contains("users/")) {
+                int idx = path.indexOf("users/");
+                return path.substring(idx);
+            }
             if (path.contains("/uploads/")) {
                 int idx = path.indexOf("/uploads/");
                 return path.substring(idx + "/uploads/".length());
             }
             if (path.startsWith("/")) {
                 path = path.substring(1);
-            }
-            int bucketSeparator = path.indexOf('/');
-            if ("storage.googleapis.com".equalsIgnoreCase(uri.getHost()) && bucketSeparator >= 0) {
-                return path.substring(bucketSeparator + 1);
             }
             return path;
         } catch (Exception e) {

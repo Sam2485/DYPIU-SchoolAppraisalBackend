@@ -189,11 +189,12 @@ public class AttachmentService {
             throw new IllegalArgumentException("Attachment URL is required.");
         }
         String objectName;
-        if (fileUrl.contains("/uploads/")) {
+        if (fileUrl.contains("users/")) {
+            int idx = fileUrl.indexOf("users/");
+            objectName = fileUrl.substring(idx);
+        } else if (fileUrl.contains("/uploads/")) {
             int idx = fileUrl.indexOf("/uploads/");
             objectName = fileUrl.substring(idx + "/uploads/".length());
-        } else if (fileUrl.startsWith("users/")) {
-            objectName = fileUrl;
         } else {
             URI uri;
             try {
@@ -202,18 +203,13 @@ public class AttachmentService {
                 throw new IllegalArgumentException("Invalid attachment URL.");
             }
 
-            String host = uri.getHost();
             String path = uri.getPath();
-            String storageHostPrefix = bucketName + ".storage.googleapis.com";
-            String storagePathPrefix = "/" + bucketName + "/";
-
-            if (path != null && path.contains("/uploads/")) {
+            if (path != null && path.contains("users/")) {
+                int idx = path.indexOf("users/");
+                objectName = path.substring(idx);
+            } else if (path != null && path.contains("/uploads/")) {
                 int idx = path.indexOf("/uploads/");
                 objectName = path.substring(idx + "/uploads/".length());
-            } else if ("storage.googleapis.com".equalsIgnoreCase(host) && path != null && path.startsWith(storagePathPrefix)) {
-                objectName = path.substring(storagePathPrefix.length());
-            } else if (storageHostPrefix.equalsIgnoreCase(host) && path != null && path.length() > 1) {
-                objectName = path.substring(1);
             } else {
                 objectName = path != null ? path : fileUrl;
             }
@@ -221,6 +217,10 @@ public class AttachmentService {
 
         if (objectName.startsWith("/")) {
             objectName = objectName.substring(1);
+        }
+
+        if (objectName.contains("users/")) {
+            objectName = objectName.substring(objectName.indexOf("users/"));
         }
 
         return storageService.downloadFile(objectName);
