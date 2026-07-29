@@ -38,6 +38,18 @@ public interface StorageService {
     InputStream downloadFile(String objectName) throws IOException;
 
     /**
+     * Downloads/reads a file's content as an input stream, with fallback search by original filename.
+     *
+     * @param objectName       the path/key of the file to download
+     * @param originalFileName the original filename submitted by the user
+     * @return an InputStream for reading the file content
+     * @throws IOException if the file is not found or cannot be read
+     */
+    default InputStream downloadFile(String objectName, String originalFileName) throws IOException {
+        return downloadFile(objectName);
+    }
+
+    /**
      * Deletes all files and folders under the specified prefix directory.
      *
      * @param prefix the directory path prefix to delete

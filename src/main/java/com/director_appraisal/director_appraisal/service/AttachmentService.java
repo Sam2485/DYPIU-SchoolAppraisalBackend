@@ -185,6 +185,10 @@ public class AttachmentService {
     }
 
     public java.io.InputStream downloadAttachmentStream(String fileUrl) throws IOException {
+        return downloadAttachmentStream(fileUrl, null);
+    }
+
+    public java.io.InputStream downloadAttachmentStream(String fileUrl, String originalFileName) throws IOException {
         if (fileUrl == null || fileUrl.isBlank()) {
             throw new IllegalArgumentException("Attachment URL is required.");
         }
@@ -223,7 +227,7 @@ public class AttachmentService {
             objectName = objectName.substring(objectName.indexOf("users/"));
         }
 
-        return storageService.downloadFile(objectName);
+        return storageService.downloadFile(objectName, originalFileName);
     }
 
     public String getUserKey(String email) {

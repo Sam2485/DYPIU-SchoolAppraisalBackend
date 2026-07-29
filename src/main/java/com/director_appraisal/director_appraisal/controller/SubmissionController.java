@@ -482,7 +482,7 @@ public class SubmissionController {
                 }
                 usedPaths.add(zipEntryPath);
 
-                try (java.io.InputStream is = attachmentService.downloadAttachmentStream(att.url)) {
+                try (java.io.InputStream is = attachmentService.downloadAttachmentStream(att.url, att.fileName)) {
                     java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(zipEntryPath);
                     zos.putNextEntry(entry);
                     byte[] buffer = new byte[8192];

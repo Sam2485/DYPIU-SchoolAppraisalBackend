@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -60,6 +61,11 @@ public class LocalFileStorageService implements StorageService {
 
     @Override
     public InputStream downloadFile(String objectName) throws IOException {
+        return downloadFile(objectName, null);
+    }
+
+    @Override
+    public InputStream downloadFile(String objectName, String originalFileName) throws IOException {
         Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
         
         String cleanPath = objectName == null ? "" : objectName;
@@ -82,25 +88,45 @@ public class LocalFileStorageService implements StorageService {
             return Files.newInputStream(directLocation);
         }
 
-        // Fallback: Search for the exact filename anywhere under uploadDir
-        try {
-            String fileName = Paths.get(objectName).getFileName().toString();
-            if (fileName != null && !fileName.isBlank()) {
-                try (java.util.stream.Stream<Path> walk = Files.walk(uploadDir)) {
-                    java.util.Optional<Path> found = walk
-                            .filter(Files::isRegularFile)
-                            .filter(p -> p.getFileName().toString().equalsIgnoreCase(fileName))
-                            .findFirst();
-                    if (found.isPresent()) {
-                        return Files.newInputStream(found.get());
-                    }
+        // Fallback: Search for candidate filenames anywhere under uploadDir
+        List<String> candidateNames = new java.util.ArrayList<>();
+        if (objectName != null && !objectName.isBlank()) {
+            candidateNames.add(Paths.get(objectName).getFileName().toString());
+        }
+        if (originalFileName != null && !originalFileName.isBlank()) {
+            candidateNames.add(originalFileName.trim());
+        }
+
+        for (String candidate : candidateNames) {
+            if (candidate.isBlank()) continue;
+            String normCandidate = normalizeForSearch(candidate);
+
+            try (java.util.stream.Stream<Path> walk = Files.walk(uploadDir)) {
+                java.util.Optional<Path> found = walk
+                        .filter(Files::isRegularFile)
+                        .filter(p -> {
+                            String pName = p.getFileName().toString();
+                            return pName.equalsIgnoreCase(candidate) ||
+                                   (!normCandidate.isEmpty() && normalizeForSearch(pName).equalsIgnoreCase(normCandidate));
+                        })
+                        .findFirst();
+                if (found.isPresent()) {
+                    return Files.newInputStream(found.get());
                 }
+            } catch (Exception e) {
+                // Ignore search errors
             }
-        } catch (Exception e) {
-            // Fallback search error ignored
         }
 
         throw new IOException("File not found locally: " + targetLocation);
+    }
+
+    private String normalizeForSearch(String str) {
+        if (str == null) return "";
+        // Strip UUID prefixes if present (e.g. 3613af12-95a3-4f32-aecc-53580b8d2502-)
+        String cleaned = str.replaceAll("^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}-", "");
+        // Remove spaces, underscores, hyphens, and non-alphanumeric except extension dot
+        return cleaned.toLowerCase().replaceAll("[^a-z0-9.]", "");
     }
 
     @Override
