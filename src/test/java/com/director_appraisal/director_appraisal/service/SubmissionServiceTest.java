@@ -859,10 +859,12 @@ class SubmissionServiceTest {
         Submission submission = Submission.builder()
                 .id(101L)
                 .email("director@dypiu.ac.in")
+                .academicYear("2026-27")
                 .attachments("[{\"url\":\"/uploads/test.pdf\"}]")
                 .tablesData("{\"someTable\":[{\"url\":\"/uploads/table.pdf\"}]}")
                 .build();
 
+        when(academicYearService.getCurrentAcademicYearLabel()).thenReturn("2026-27");
         when(submissionRepository.findAllByEmailIgnoreCase("director@dypiu.ac.in"))
                 .thenReturn(List.of(submission));
 
@@ -873,6 +875,45 @@ class SubmissionServiceTest {
         verify(snapshotRepository).deleteBySubmissionId(101L);
         verify(auditorAssignmentRepository).deleteBySubmissionId(101L);
         verify(submissionRepository).delete(submission);
+    }
+
+    @Test
+    void testDeleteUserSubmissionsPreservesHistoricalYears() throws Exception {
+        User user = User.builder().email("director@dypiu.ac.in").build();
+        Submission pastSubmission = Submission.builder()
+                .id(100L)
+                .email("director@dypiu.ac.in")
+                .academicYear("2025-26")
+                .attachments("[{\"url\":\"/uploads/past.pdf\"}]")
+                .tablesData("{\"pastTable\":[{\"url\":\"/uploads/past_table.pdf\"}]}")
+                .build();
+        Submission currentSubmission = Submission.builder()
+                .id(101L)
+                .email("director@dypiu.ac.in")
+                .academicYear("2026-27")
+                .attachments("[{\"url\":\"/uploads/current.pdf\"}]")
+                .tablesData("{\"currentTable\":[{\"url\":\"/uploads/current_table.pdf\"}]}")
+                .build();
+
+        when(academicYearService.getCurrentAcademicYearLabel()).thenReturn("2026-27");
+        when(submissionRepository.findAllByEmailIgnoreCase("director@dypiu.ac.in"))
+                .thenReturn(List.of(pastSubmission, currentSubmission));
+
+        submissionService.deleteUserSubmissionsAndAttachments(user);
+
+        // Verify current submission is deleted
+        verify(attachmentService).deleteFile("/uploads/current.pdf");
+        verify(attachmentService).deleteFile("/uploads/current_table.pdf");
+        verify(snapshotRepository).deleteBySubmissionId(101L);
+        verify(auditorAssignmentRepository).deleteBySubmissionId(101L);
+        verify(submissionRepository).delete(currentSubmission);
+
+        // Verify past submission is NOT deleted
+        verify(attachmentService, never()).deleteFile("/uploads/past.pdf");
+        verify(attachmentService, never()).deleteFile("/uploads/past_table.pdf");
+        verify(snapshotRepository, never()).deleteBySubmissionId(100L);
+        verify(auditorAssignmentRepository, never()).deleteBySubmissionId(100L);
+        verify(submissionRepository, never()).delete(pastSubmission);
     }
 
     @Test

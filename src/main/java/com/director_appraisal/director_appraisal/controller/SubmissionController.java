@@ -246,7 +246,10 @@ public class SubmissionController {
             if (submission.getEmail() != null) {
                 java.util.Optional<User> submitter = userRepository.findByEmail(submission.getEmail().trim().toLowerCase());
                 if (submitter.isPresent() && Boolean.TRUE.equals(submitter.get().getDeleted())) {
-                    throw new IllegalArgumentException("Submission not found with ID: " + id);
+                    String currentYear = submissionService.getCurrentAcademicYearLabel();
+                    if (submissionService.isSameAcademicYear(currentYear, submission.getAcademicYear()) || submissionService.isSameAcademicYear(currentYear, submission.getAuditCycle())) {
+                        throw new IllegalArgumentException("Submission not found with ID: " + id);
+                    }
                 }
             }
         }

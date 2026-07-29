@@ -116,11 +116,13 @@ public class UserService implements UserDetailsService {
             return;
         }
 
-        // Remove administrative contributions or delete user's submissions
+        String currentAcademicYear = submissionService.getCurrentAcademicYearLabel();
+
+        // Remove administrative contributions or delete user's submissions for CURRENT academic year ONLY
         if ("administrative".equalsIgnoreCase(user.getRole())) {
-            submissionService.removeAdministrativeUserContribution(user);
+            submissionService.removeAdministrativeUserContribution(user, currentAcademicYear);
         } else {
-            submissionService.deleteUserSubmissionsAndAttachments(user);
+            submissionService.deleteUserSubmissionsAndAttachments(user, currentAcademicYear);
         }
 
         if (user.getId() != null) {
@@ -130,7 +132,9 @@ public class UserService implements UserDetailsService {
             resetTokenRepository.deleteByEmail(user.getEmail().trim().toLowerCase());
         }
 
-        userRepository.delete(user);
+        user.setDeleted(true);
+        user.setDeletedAt(LocalDateTime.now());
+        userRepository.save(user);
         userRepository.flush();
     }
 

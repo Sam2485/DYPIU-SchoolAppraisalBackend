@@ -48,6 +48,14 @@ public class SubmissionService {
     private final UserAdministrativePostRepository userAdministrativePostRepository;
     private final AttachmentService attachmentService;
 
+    public String getCurrentAcademicYearLabel() {
+        if (academicYearService == null) {
+            return "2025-2026";
+        }
+        String year = academicYearService.getCurrentAcademicYearLabel();
+        return (year != null && !year.isBlank()) ? year : "2025-2026";
+    }
+
     @Transactional
     public Submission getOrCreateSharedAdministrativeDraft(User caller) {
         if (caller == null || !"administrative".equalsIgnoreCase(caller.getRole())) {
@@ -323,11 +331,52 @@ public class SubmissionService {
         return mergeSharedAdministrativeContribution(id, caller, action, contributorPost, sections, valuesData, tablesData, attachments);
     }
 
+    public boolean isSameAcademicYear(String targetYear, String candidateYear) {
+        if (targetYear == null || targetYear.isBlank() || candidateYear == null || candidateYear.isBlank()) {
+            return false;
+        }
+        String y1 = targetYear.trim();
+        String y2 = candidateYear.trim();
+        if (y1.equalsIgnoreCase(y2)) {
+            return true;
+        }
+        String y1Long = toAcademicYear(y1);
+        String y2Long = toAcademicYear(y2);
+        if (y1Long != null && y1Long.equalsIgnoreCase(y2Long)) {
+            return true;
+        }
+        String y1Short = toAuditCycle(y1);
+        String y2Short = toAuditCycle(y2);
+        return y1Short != null && y1Short.equalsIgnoreCase(y2Short);
+    }
+
+    public boolean submissionBelongsToAcademicYear(Submission sub, String targetAcademicYear) {
+        if (sub == null || targetAcademicYear == null || targetAcademicYear.isBlank()) {
+            return true;
+        }
+        String year = (sub.getAcademicYear() != null && !sub.getAcademicYear().isBlank())
+                ? sub.getAcademicYear()
+                : sub.getAuditCycle();
+        if (year == null || year.isBlank()) {
+            return true;
+        }
+        return isSameAcademicYear(targetAcademicYear, year);
+    }
+
     @Transactional
     public void removeAdministrativeUserContribution(User user) {
+        removeAdministrativeUserContribution(user, getCurrentAcademicYearLabel());
+    }
+
+    @Transactional
+    public void removeAdministrativeUserContribution(User user, String academicYearFilter) {
         if (user == null || !"administrative".equalsIgnoreCase(user.getRole())) {
             return;
         }
+
+        String currentYear = (academicYearFilter != null && !academicYearFilter.isBlank())
+                ? academicYearFilter
+                : getCurrentAcademicYearLabel();
 
         java.util.Set<String> posts = resolveAdministrativePosts(user);
         if (posts.isEmpty()) {
@@ -339,6 +388,7 @@ public class SubmissionService {
 
         List<Submission> sharedForms = submissionRepository.findAllByEmailIgnoreCase(SHARED_ADMINISTRATIVE_EMAIL).stream()
                 .filter(submission -> "administrative".equalsIgnoreCase(submission.getAuditType()))
+                .filter(submission -> submissionBelongsToAcademicYear(submission, currentYear))
                 .toList();
 
         ObjectMapper mapper = new ObjectMapper();
@@ -359,15 +409,7 @@ public class SubmissionService {
                 locked.setTablesData(mapper.writeValueAsString(tables));
                 locked.setAttachments(removeAdministrativeOwnedAttachments(mapper, locked.getAttachments(), sections));
 
-                boolean allSubmitted = ADMIN_POSTS.stream()
-                        .allMatch(requiredPost -> {
-                            if (!isPostRequiredForAdministrativeWorkflow(requiredPost)) {
-                                return true;
-                            }
-                            String status = values.path("administrativeProgress").path(requiredPost).asText("DRAFT");
-                            return "SUBMITTED".equalsIgnoreCase(status) || "APPROVED".equalsIgnoreCase(status);
-                        });
-                if (!allSubmitted && !"DRAFT".equalsIgnoreCase(locked.getStatus())) {
+                if (!"DRAFT".equalsIgnoreCase(locked.getStatus())) {
                     locked.setStatus("DRAFT");
                     locked.setSubmittedAt(null);
                 }
@@ -381,10 +423,18 @@ public class SubmissionService {
 
     @Transactional
     public void deleteUserSubmissionsAndAttachments(User user) {
+        deleteUserSubmissionsAndAttachments(user, getCurrentAcademicYearLabel());
+    }
+
+    @Transactional
+    public void deleteUserSubmissionsAndAttachments(User user, String academicYearFilter) {
         if (user == null) {
             return;
         }
         String email = user.getEmail() != null ? user.getEmail().trim() : null;
+        String currentYear = (academicYearFilter != null && !academicYearFilter.isBlank())
+                ? academicYearFilter
+                : getCurrentAcademicYearLabel();
 
         List<Submission> submissions = new java.util.ArrayList<>();
 
@@ -397,12 +447,25 @@ public class SubmissionService {
                 continue;
             }
 
+            // Historical data protection: ONLY delete submissions belonging to the CURRENT academic year
+            if (!submissionBelongsToAcademicYear(submission, currentYear)) {
+                continue;
+            }
+
             Long rootId = resolveRootSubmissionId(submission);
             List<Submission> lineage = submissionRepository.findLineage(rootId);
+            if (lineage == null || lineage.isEmpty()) {
+                lineage = List.of(submission);
+            }
             for (Submission target : lineage) {
                 if (target == null || target.getId() == null) continue;
 
-                // Delete physical files
+                // Ensure target in lineage also belongs to the current academic year
+                if (!submissionBelongsToAcademicYear(target, currentYear)) {
+                    continue;
+                }
+
+                // Delete physical files attached to current year's target
                 if (target.getAttachments() != null && !target.getAttachments().isBlank()) {
                     try {
                         ObjectMapper mapper = new ObjectMapper();
@@ -435,10 +498,6 @@ public class SubmissionService {
                 auditorAssignmentRepository.deleteBySubmissionId(target.getId());
                 submissionRepository.delete(target);
             }
-        }
-
-        if (email != null && !email.isBlank()) {
-            attachmentService.deleteUserUploads(email);
         }
     }
 
@@ -1142,7 +1201,7 @@ public class SubmissionService {
             list = List.of();
         }
 
-        // Exclude active submissions where the submitting user is soft-deleted/inactive
+        // Exclude active submissions where the submitting user is soft-deleted/inactive (only for current academic year)
         return list.stream()
                 .filter(sub -> {
                     if ("APPROVED".equalsIgnoreCase(sub.getStatus()) || "FINAL".equalsIgnoreCase(sub.getStatus())) {
@@ -1154,7 +1213,10 @@ public class SubmissionService {
                     if (sub.getEmail() != null) {
                         Optional<User> submitter = userRepository.findByEmail(sub.getEmail().trim().toLowerCase());
                         if (submitter.isPresent() && Boolean.TRUE.equals(submitter.get().getDeleted())) {
-                            return false;
+                            String currentYear = getCurrentAcademicYearLabel();
+                            if (isSameAcademicYear(currentYear, sub.getAcademicYear()) || isSameAcademicYear(currentYear, sub.getAuditCycle())) {
+                                return false;
+                            }
                         }
                     }
                     return true;
