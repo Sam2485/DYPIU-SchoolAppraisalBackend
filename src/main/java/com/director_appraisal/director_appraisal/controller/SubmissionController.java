@@ -515,9 +515,35 @@ public class SubmissionController {
         if (node == null) return;
         if (node.isObject()) {
             String currentSection = sectionContext;
+            String url = null;
             if (node.has("url") && node.get("url").isTextual()) {
-                String url = node.get("url").asText();
-                if (url.contains("/uploads/") || url.startsWith("users/") || url.contains("/users/") || url.contains("storage.googleapis.com")) {
+                url = node.get("url").asText();
+            } else if (node.has("publicUrl") && node.get("publicUrl").isTextual()) {
+                url = node.get("publicUrl").asText();
+            } else if (node.has("downloadUrl") && node.get("downloadUrl").isTextual()) {
+                url = node.get("downloadUrl").asText();
+            } else if (node.has("fileUrl") && node.get("fileUrl").isTextual()) {
+                url = node.get("fileUrl").asText();
+            }
+
+            if (url != null && !url.isBlank()) {
+                String lowerUrl = url.toLowerCase();
+                boolean isAttachment = lowerUrl.contains("/uploads/")
+                        || lowerUrl.contains("/attachments/")
+                        || lowerUrl.startsWith("users/")
+                        || lowerUrl.contains("/users/")
+                        || lowerUrl.contains("storage.googleapis.com")
+                        || lowerUrl.endsWith(".pdf")
+                        || lowerUrl.endsWith(".docx")
+                        || lowerUrl.endsWith(".xlsx")
+                        || lowerUrl.endsWith(".png")
+                        || lowerUrl.endsWith(".jpg")
+                        || lowerUrl.endsWith(".jpeg")
+                        || lowerUrl.endsWith(".doc")
+                        || lowerUrl.endsWith(".xls")
+                        || lowerUrl.endsWith(".zip");
+
+                if (isAttachment) {
                     ExtractedAttachment att = new ExtractedAttachment();
                     att.url = url;
                     att.objectKey = extractObjectKey(url);
