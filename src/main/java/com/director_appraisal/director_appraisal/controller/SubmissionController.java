@@ -436,8 +436,7 @@ public class SubmissionController {
             if (submission.getTablesData() != null && !submission.getTablesData().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getTablesData()), attachments);
             }
-            if (includeAllContributors && "administrative".equalsIgnoreCase(submission.getAuditType())
-                    && submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
+            if (submission.getValuesData() != null && !submission.getValuesData().isBlank()) {
                 collectAttachments(mapper.readTree(submission.getValuesData()), attachments);
             }
         } catch (Exception e) {
@@ -518,7 +517,7 @@ public class SubmissionController {
             String currentSection = sectionContext;
             if (node.has("url") && node.get("url").isTextual()) {
                 String url = node.get("url").asText();
-                if (url.startsWith("/uploads/") || url.contains(".storage.googleapis.com") || url.contains("storage.googleapis.com")) {
+                if (url.contains("/uploads/") || url.startsWith("users/") || url.contains("/users/") || url.contains("storage.googleapis.com")) {
                     ExtractedAttachment att = new ExtractedAttachment();
                     att.url = url;
                     att.objectKey = extractObjectKey(url);
@@ -664,14 +663,19 @@ public class SubmissionController {
         if (url == null || url.isBlank()) {
             return null;
         }
-        if (url.startsWith("/uploads/")) {
-            return url.substring("/uploads/".length());
+        if (url.contains("/uploads/")) {
+            int idx = url.indexOf("/uploads/");
+            return url.substring(idx + "/uploads/".length());
         }
         try {
             java.net.URI uri = java.net.URI.create(url);
             String path = uri.getPath();
             if (path == null || path.isBlank()) {
                 return null;
+            }
+            if (path.contains("/uploads/")) {
+                int idx = path.indexOf("/uploads/");
+                return path.substring(idx + "/uploads/".length());
             }
             if (path.startsWith("/")) {
                 path = path.substring(1);

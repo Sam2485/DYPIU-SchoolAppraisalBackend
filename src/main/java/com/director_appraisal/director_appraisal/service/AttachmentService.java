@@ -102,8 +102,11 @@ public class AttachmentService {
         }
 
         String objectName;
-        if (fileUrl.startsWith("/uploads/")) {
-            objectName = fileUrl.substring("/uploads/".length());
+        if (fileUrl.contains("/uploads/")) {
+            int idx = fileUrl.indexOf("/uploads/");
+            objectName = fileUrl.substring(idx + "/uploads/".length());
+        } else if (fileUrl.startsWith("users/")) {
+            objectName = fileUrl;
         } else {
             URI uri;
             try {
@@ -117,8 +120,9 @@ public class AttachmentService {
             String storageHostPrefix = bucketName + ".storage.googleapis.com";
             String storagePathPrefix = "/" + bucketName + "/";
 
-            if (path != null && path.startsWith("/uploads/")) {
-                objectName = path.substring("/uploads/".length());
+            if (path != null && path.contains("/uploads/")) {
+                int idx = path.indexOf("/uploads/");
+                objectName = path.substring(idx + "/uploads/".length());
             } else if ("storage.googleapis.com".equalsIgnoreCase(host) && path != null && path.startsWith(storagePathPrefix)) {
                 objectName = path.substring(storagePathPrefix.length());
             } else if (storageHostPrefix.equalsIgnoreCase(host) && path != null && path.length() > 1) {
@@ -126,6 +130,10 @@ public class AttachmentService {
             } else {
                 throw new IllegalArgumentException("Invalid attachment URL.");
             }
+        }
+
+        if (objectName.startsWith("/")) {
+            objectName = objectName.substring(1);
         }
 
         String userPrefix = "users/" + getCurrentUserKey() + "/attachments/";
@@ -177,9 +185,15 @@ public class AttachmentService {
     }
 
     public java.io.InputStream downloadAttachmentStream(String fileUrl) throws IOException {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new IllegalArgumentException("Attachment URL is required.");
+        }
         String objectName;
-        if (fileUrl.startsWith("/uploads/")) {
-            objectName = fileUrl.substring("/uploads/".length());
+        if (fileUrl.contains("/uploads/")) {
+            int idx = fileUrl.indexOf("/uploads/");
+            objectName = fileUrl.substring(idx + "/uploads/".length());
+        } else if (fileUrl.startsWith("users/")) {
+            objectName = fileUrl;
         } else {
             URI uri;
             try {
@@ -193,8 +207,9 @@ public class AttachmentService {
             String storageHostPrefix = bucketName + ".storage.googleapis.com";
             String storagePathPrefix = "/" + bucketName + "/";
 
-            if (path != null && path.startsWith("/uploads/")) {
-                objectName = path.substring("/uploads/".length());
+            if (path != null && path.contains("/uploads/")) {
+                int idx = path.indexOf("/uploads/");
+                objectName = path.substring(idx + "/uploads/".length());
             } else if ("storage.googleapis.com".equalsIgnoreCase(host) && path != null && path.startsWith(storagePathPrefix)) {
                 objectName = path.substring(storagePathPrefix.length());
             } else if (storageHostPrefix.equalsIgnoreCase(host) && path != null && path.length() > 1) {
