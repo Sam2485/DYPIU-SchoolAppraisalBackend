@@ -66,29 +66,39 @@ public class LocalFileStorageService implements StorageService {
 
     @Override
     public InputStream downloadFile(String objectName, String originalFileName) throws IOException {
-        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        Path primaryUploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
         
+        List<Path> searchDirs = new java.util.ArrayList<>();
+        searchDirs.add(primaryUploadDir);
+        Path testDir = Paths.get("/app/uploads-test").toAbsolutePath().normalize();
+        Path defaultDir = Paths.get("/app/uploads").toAbsolutePath().normalize();
+        if (!searchDirs.contains(testDir)) searchDirs.add(testDir);
+        if (!searchDirs.contains(defaultDir)) searchDirs.add(defaultDir);
+
         String cleanPath = objectName == null ? "" : objectName;
         if (cleanPath.contains("users/")) {
             cleanPath = cleanPath.substring(cleanPath.indexOf("users/"));
+        } else if (cleanPath.contains("uploads-test/")) {
+            cleanPath = cleanPath.substring(cleanPath.indexOf("uploads-test/") + "uploads-test/".length());
         } else if (cleanPath.contains("uploads/")) {
             cleanPath = cleanPath.substring(cleanPath.indexOf("uploads/") + "uploads/".length());
         }
-        
-        Path targetLocation = uploadDir.resolve(cleanPath).normalize();
-        
-        // Safety check to prevent Directory Traversal attacks
-        if (targetLocation.startsWith(uploadDir) && Files.exists(targetLocation)) {
-            return Files.newInputStream(targetLocation);
+
+        for (Path uploadDir : searchDirs) {
+            if (!Files.exists(uploadDir)) continue;
+
+            Path targetLocation = uploadDir.resolve(cleanPath).normalize();
+            if (targetLocation.startsWith(uploadDir) && Files.exists(targetLocation)) {
+                return Files.newInputStream(targetLocation);
+            }
+
+            Path directLocation = uploadDir.resolve(objectName == null ? "" : objectName).normalize();
+            if (directLocation.startsWith(uploadDir) && Files.exists(directLocation)) {
+                return Files.newInputStream(directLocation);
+            }
         }
 
-        // Try direct objectName resolution if cleanPath didn't exist
-        Path directLocation = uploadDir.resolve(objectName).normalize();
-        if (directLocation.startsWith(uploadDir) && Files.exists(directLocation)) {
-            return Files.newInputStream(directLocation);
-        }
-
-        // Fallback: Search for candidate filenames anywhere under uploadDir
+        // Fallback: Search for candidate filenames anywhere under all upload directories
         List<String> candidateNames = new java.util.ArrayList<>();
         if (objectName != null && !objectName.isBlank()) {
             candidateNames.add(Paths.get(objectName).getFileName().toString());
@@ -97,28 +107,31 @@ public class LocalFileStorageService implements StorageService {
             candidateNames.add(originalFileName.trim());
         }
 
-        for (String candidate : candidateNames) {
-            if (candidate.isBlank()) continue;
-            String normCandidate = normalizeForSearch(candidate);
+        for (Path uploadDir : searchDirs) {
+            if (!Files.exists(uploadDir)) continue;
+            for (String candidate : candidateNames) {
+                if (candidate.isBlank()) continue;
+                String normCandidate = normalizeForSearch(candidate);
 
-            try (java.util.stream.Stream<Path> walk = Files.walk(uploadDir)) {
-                java.util.Optional<Path> found = walk
-                        .filter(Files::isRegularFile)
-                        .filter(p -> {
-                            String pName = p.getFileName().toString();
-                            return pName.equalsIgnoreCase(candidate) ||
-                                   (!normCandidate.isEmpty() && normalizeForSearch(pName).equalsIgnoreCase(normCandidate));
-                        })
-                        .findFirst();
-                if (found.isPresent()) {
-                    return Files.newInputStream(found.get());
+                try (java.util.stream.Stream<Path> walk = Files.walk(uploadDir)) {
+                    java.util.Optional<Path> found = walk
+                            .filter(Files::isRegularFile)
+                            .filter(p -> {
+                                String pName = p.getFileName().toString();
+                                return pName.equalsIgnoreCase(candidate) ||
+                                       (!normCandidate.isEmpty() && normalizeForSearch(pName).equalsIgnoreCase(normCandidate));
+                            })
+                            .findFirst();
+                    if (found.isPresent()) {
+                        return Files.newInputStream(found.get());
+                    }
+                } catch (Exception e) {
+                    // Ignore search errors
                 }
-            } catch (Exception e) {
-                // Ignore search errors
             }
         }
 
-        throw new IOException("File not found locally: " + targetLocation);
+        throw new IOException("File not found locally: " + objectName);
     }
 
     private String normalizeForSearch(String str) {
