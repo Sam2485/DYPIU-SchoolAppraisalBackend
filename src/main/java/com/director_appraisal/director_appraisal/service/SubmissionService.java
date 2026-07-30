@@ -3234,6 +3234,8 @@ public class SubmissionService {
         } catch (Exception e) {
             log.error("Error validating auditor access: {}", e.getMessage(), e);
         }
+    }
+
     public List<String> getYearVariants(String yearInput) {
         if (yearInput == null || yearInput.isBlank()) {
             return List.of();
