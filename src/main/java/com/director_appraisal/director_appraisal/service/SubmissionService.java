@@ -3234,6 +3234,97 @@ public class SubmissionService {
         } catch (Exception e) {
             log.error("Error validating auditor access: {}", e.getMessage(), e);
         }
+    public List<String> getYearVariants(String yearInput) {
+        if (yearInput == null || yearInput.isBlank()) {
+            return List.of();
+        }
+        String cleaned = yearInput.trim();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d{4})\\D+(\\d{2,4})").matcher(cleaned);
+        if (matcher.find()) {
+            int start = Integer.parseInt(matcher.group(1));
+            String endStr = matcher.group(2);
+            int end = endStr.length() == 2 ? Integer.parseInt(start / 100 + endStr) : Integer.parseInt(endStr);
+            String fullYear = start + "-" + end;
+            String compactEnd = String.valueOf(end).length() >= 2 ? String.valueOf(end).substring(String.valueOf(end).length() - 2) : String.valueOf(end);
+            String compactYear = start + "-" + compactEnd;
+            String periodYear = "July, " + start + " - June, " + end;
+
+            return List.of(
+                    cleaned,
+                    fullYear,
+                    compactYear,
+                    "AY " + fullYear,
+                    "AY " + compactYear,
+                    periodYear
+            );
+        }
+        return List.of(cleaned);
+    }
+
+    public boolean isSameAcademicYear(String year1, String year2) {
+        if (year1 == null || year2 == null) return false;
+        if (year1.trim().equalsIgnoreCase(year2.trim())) return true;
+        List<String> v1 = getYearVariants(year1);
+        List<String> v2 = getYearVariants(year2);
+        return v1.stream().anyMatch(v2::contains);
+    }
+
+    public Submission getDraftForUser(User user, String auditType, String requestedYear, boolean includeHistorical, boolean shared) {
+        if (shared && "administrative".equalsIgnoreCase(auditType)) {
+            if (requestedYear != null && !requestedYear.isBlank()) {
+                return getOrCreateSharedAdministrativeDraftForCycle(requestedYear);
+            }
+            return getOrCreateSharedAdministrativeDraft(user);
+        }
+
+        String activeYear = academicYearService.getCurrentAcademicYearLabel();
+        boolean isYearRequested = requestedYear != null && !requestedYear.isBlank() && !"null".equalsIgnoreCase(requestedYear.trim());
+        boolean isHistoricalRequest = isYearRequested && !isSameAcademicYear(requestedYear, activeYear);
+
+        String role = user.getRole() != null ? user.getRole().toLowerCase() : "";
+
+        if (isHistoricalRequest || includeHistorical || (role.contains("director") && "academic".equalsIgnoreCase(auditType) && isYearRequested)) {
+            if (role.contains("director") && "academic".equalsIgnoreCase(auditType)) {
+                String userSchool = SchoolUtils.canonicalizeSchool(user.getSchool());
+                List<String> yearVariants = getYearVariants(isYearRequested ? requestedYear : activeYear);
+                
+                List<Submission> candidates = submissionRepository.findSubmissionsByAuditTypeAndYearLabels("academic", yearVariants);
+                
+                Submission bestMatch = candidates.stream()
+                        .filter(s -> userSchool != null && userSchool.equalsIgnoreCase(SchoolUtils.canonicalizeSchool(s.getSchool())))
+                        .findFirst()
+                        .orElse(null);
+
+                if (bestMatch != null) {
+                    return bestMatch;
+                }
+            } else {
+                List<String> yearVariants = getYearVariants(isYearRequested ? requestedYear : activeYear);
+                List<Submission> userSubmissions = submissionRepository.findSubmissionsByEmailAndAuditTypeAndYearLabels(
+                        user.getEmail(), auditType, yearVariants);
+                if (!userSubmissions.isEmpty()) {
+                    return userSubmissions.get(0);
+                }
+            }
+        }
+
+        // Standard active working draft
+        if (isYearRequested && !isSameAcademicYear(requestedYear, activeYear)) {
+            Submission emptyHist = new Submission();
+            emptyHist.setEmail(user.getEmail());
+            emptyHist.setAuditType(auditType);
+            emptyHist.setSchool(SchoolUtils.canonicalizeSchool(user.getSchool()));
+            emptyHist.setAcademicYear(requestedYear);
+            emptyHist.setAuditCycle(requestedYear);
+            emptyHist.setStatus("DRAFT");
+            emptyHist.setVersion(1);
+            emptyHist.setValuesData("{}");
+            emptyHist.setTablesData("{}");
+            emptyHist.setAttachments("[]");
+            return emptyHist;
+        }
+
+        return getOrCreateDraft(user.getEmail(), auditType);
     }
 
     public void populatePermissions(Submission submission, User user) {
@@ -3354,7 +3445,13 @@ public class SubmissionService {
             permissionMap.put("readOnlyPosts", java.util.Collections.emptyList());
             permissionMap.put("permissions", java.util.Collections.emptyMap());
         }
-        
+
+        if (submission.getAcademicYear() != null && !isSameAcademicYear(submission.getAcademicYear(), academicYearService.getCurrentAcademicYearLabel())) {
+            permissionMap.put("canEditContribution", false);
+            permissionMap.put("canEdit", false);
+            permissionMap.put("isHistorical", true);
+        }
+
         submission.setPermissions(permissionMap);
     }
 

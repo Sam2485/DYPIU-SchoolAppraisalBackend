@@ -42,6 +42,29 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     Optional<Submission> findByRootSubmissionIdAndVersion(Long rootSubmissionId, Integer version);
     Optional<Submission> findByParentSubmissionId(Long parentSubmissionId);
 
+    @Query("""
+            select s from Submission s
+            where lower(s.auditType) = lower(:auditType)
+            and (
+                s.academicYear in (:yearLabels)
+                or s.auditCycle in (:yearLabels)
+            )
+            order by s.version desc, s.id desc
+            """)
+    List<Submission> findSubmissionsByAuditTypeAndYearLabels(@Param("auditType") String auditType, @Param("yearLabels") List<String> yearLabels);
+
+    @Query("""
+            select s from Submission s
+            where lower(s.email) = lower(:email)
+            and lower(s.auditType) = lower(:auditType)
+            and (
+                s.academicYear in (:yearLabels)
+                or s.auditCycle in (:yearLabels)
+            )
+            order by s.version desc, s.id desc
+            """)
+    List<Submission> findSubmissionsByEmailAndAuditTypeAndYearLabels(@Param("email") String email, @Param("auditType") String auditType, @Param("yearLabels") List<String> yearLabels);
+
     @Query("select distinct s.academicYear from Submission s where s.academicYear is not null and s.academicYear != ''")
     List<String> findDistinctAcademicYears();
 }

@@ -40,16 +40,39 @@ public class SubmissionController {
     }
 
     @GetMapping("/my-draft")
-    public ResponseEntity<Submission> getMyDraft(@RequestParam(required = false) String auditType,
-                                                 @RequestParam(required = false, defaultValue = "false") boolean shared) {
-        String email = getCurrentUserEmail();
+    public ResponseEntity<Submission> getMyDraft(
+            @RequestParam(required = false) String auditType,
+            @RequestParam(required = false) String academicYear,
+            @RequestParam(required = false) String auditCycle,
+            @RequestParam(required = false) String cycleId,
+            @RequestParam(required = false, defaultValue = "false") boolean includeSubmitted,
+            @RequestParam(required = false, defaultValue = "false") boolean includeApproved,
+            @RequestParam(required = false, defaultValue = "false") boolean includeHistorical,
+            @RequestParam(required = false, defaultValue = "false") boolean shared) {
         User user = getCurrentUserDetails();
         String normalizedAuditType = normalizeAuditType(auditType);
-        Submission draft = shared && "administrative".equals(normalizedAuditType)
-                ? submissionService.getOrCreateSharedAdministrativeDraft(user)
-                : submissionService.getOrCreateDraft(email, normalizedAuditType);
+        String requestedYear = firstNonBlank(academicYear, auditCycle, cycleId);
+        boolean includeNonDrafts = includeSubmitted || includeApproved || includeHistorical;
+
+        Submission draft = submissionService.getDraftForUser(
+                user,
+                normalizedAuditType,
+                requestedYear,
+                includeNonDrafts,
+                shared
+        );
         submissionService.populatePermissions(draft, user);
         return ResponseEntity.ok(draft);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) return null;
+        for (String v : values) {
+            if (v != null && !v.isBlank() && !"null".equalsIgnoreCase(v.trim()) && !"undefined".equalsIgnoreCase(v.trim())) {
+                return v.trim();
+            }
+        }
+        return null;
     }
 
     @GetMapping("/administrative/{cycleId}/status")
@@ -342,6 +365,9 @@ public class SubmissionController {
     @Data
     public static class FormSubmissionRequest {
         private String auditType;
+        private String academicYear;
+        private String auditCycle;
+        private String cycleId;
         private String valuesData;
         private String tablesData;
         private String attachments;
