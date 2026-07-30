@@ -3263,14 +3263,6 @@ public class SubmissionService {
         return List.of(cleaned);
     }
 
-    public boolean isSameAcademicYear(String year1, String year2) {
-        if (year1 == null || year2 == null) return false;
-        if (year1.trim().equalsIgnoreCase(year2.trim())) return true;
-        List<String> v1 = getYearVariants(year1);
-        List<String> v2 = getYearVariants(year2);
-        return v1.stream().anyMatch(v2::contains);
-    }
-
     public Submission getDraftForUser(User user, String auditType, String requestedYear, boolean includeHistorical, boolean shared) {
         if (shared && "administrative".equalsIgnoreCase(auditType)) {
             if (requestedYear != null && !requestedYear.isBlank()) {
