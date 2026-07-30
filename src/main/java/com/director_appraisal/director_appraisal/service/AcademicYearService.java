@@ -34,6 +34,40 @@ public class AcademicYearService {
                 .orElse(DEFAULT_ACADEMIC_YEAR);
     }
 
+    public Map<String, Object> getAcademicYearInfo() {
+        List<AcademicYear> activeYears = academicYearRepository.findByActiveTrue();
+        String activeYearLabel = activeYears.stream()
+                .findFirst()
+                .map(AcademicYear::getYearLabel)
+                .orElse(DEFAULT_ACADEMIC_YEAR);
+
+        List<String> dbYears = academicYearRepository.findAll().stream()
+                .map(AcademicYear::getYearLabel)
+                .filter(y -> y != null && !y.isBlank())
+                .toList();
+
+        List<String> submissionYears = submissionRepository.findDistinctAcademicYears();
+
+        java.util.Set<String> allYearsSet = new java.util.LinkedHashSet<>();
+        allYearsSet.add(activeYearLabel);
+        allYearsSet.addAll(dbYears);
+        allYearsSet.addAll(submissionYears);
+        if (allYearsSet.isEmpty()) {
+            allYearsSet.add(DEFAULT_ACADEMIC_YEAR);
+        }
+
+        List<String> sortedYears = allYearsSet.stream()
+                .filter(y -> y != null && !y.isBlank())
+                .sorted(java.util.Comparator.naturalOrder())
+                .toList();
+
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("activeYear", activeYearLabel);
+        response.put("compactActiveYear", toAuditCycle(activeYearLabel));
+        response.put("availableYears", sortedYears);
+        return response;
+    }
+
     @Transactional
     public Map<String, Object> startNextAcademicYear(String currentAcademicYear, String nextAcademicYear,
                                                      boolean preserveApprovedHistory, boolean resetActiveForms,

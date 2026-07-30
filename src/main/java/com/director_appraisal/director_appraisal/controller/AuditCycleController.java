@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,6 +24,16 @@ import java.util.Map;
 public class AuditCycleController {
 
     private final AcademicYearService academicYearService;
+
+    @GetMapping("/current")
+    public ResponseEntity<Map<String, Object>> getCurrentAcademicYear() {
+        return ResponseEntity.ok(academicYearService.getAcademicYearInfo());
+    }
+
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> getAllAcademicYears() {
+        return ResponseEntity.ok(academicYearService.getAcademicYearInfo());
+    }
 
     @PostMapping("/start-next")
     @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC')")

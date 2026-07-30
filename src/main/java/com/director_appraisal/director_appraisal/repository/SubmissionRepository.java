@@ -41,4 +41,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     Optional<Submission> findByRootSubmissionIdAndVersion(Long rootSubmissionId, Integer version);
     Optional<Submission> findByParentSubmissionId(Long parentSubmissionId);
+
+    @Query("select distinct s.academicYear from Submission s where s.academicYear is not null and s.academicYear != ''")
+    List<String> findDistinctAcademicYears();
 }
