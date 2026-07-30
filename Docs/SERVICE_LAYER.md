@@ -6,7 +6,7 @@ This document describes the business services, transactional processes, and file
 
 ## 1. Core Services
 
-### UserService
+#### UserService
 Integrates with Spring Security's `UserDetailsService` and handles user authentication, profile CRUD operations, and password reset flows:
 - `loadUserByUsername(String email)`: Dynamically retrieves a user from the database by email address.
 - `findByEmail(String email)`: Checks for user existence by email.
@@ -14,10 +14,11 @@ Integrates with Spring Security's `UserDetailsService` and handles user authenti
 - `findAllUsers()`: Retrieves a list of all user profiles registered in the system.
 - `createUser(User user)`: Checks for email conflicts, encodes the raw password using BCrypt hashing, and persists the new user.
 - `updateUser(User user, String rawPassword)`: Saves changes to name, email, role, school, and designation. If a non-blank `rawPassword` is supplied, it re-hashes and updates the user's password.
-- `deleteUser(User user)`: Completely deletes the user profile and all associated data:
-  1. Calls `SubmissionService.removeAdministrativeUserContribution` to clear their sections' data (values, tables, progress, approvals, and physical files) from shared administrative cycle forms.
-  2. Calls `SubmissionService.deleteUserSubmissionsAndAttachments` to remove all their academic/owned submissions and physically delete all referenced file attachments from cloud/local storage.
-  3. Clears reset tokens, auditor assignments, administrative posts, and finally deletes the user record.
+- `deleteUser(User user)`: Performs soft-deletion and year-scoped data cleanup to enforce historical appraisal data immutability:
+  1. Applies soft-deletion (`setDeleted(true)`, `setDeletedAt(now)`), preserving user identity for historical reporting.
+  2. Calls `SubmissionService.removeAdministrativeUserContribution` and `SubmissionService.deleteUserSubmissionsAndAttachments` strictly for records belonging to the CURRENT active working academic year (e.g. `2025-26`).
+  3. Historical appraisal records from previous academic years are kept permanently IMMUTABLE and remain viewable via the year-selection dropdown.
+  4. Clears reset tokens, auditor assignments, and administrative posts associated with the active academic year.
 - `checkPassword(String rawPassword, String encodedPassword)`: Compares raw login inputs against BCrypt-encrypted database passwords.
 - `createPasswordResetToken(String email)`: Performs password reset token generation:
   1. Locates the user or throws an exception.
@@ -48,53 +49,62 @@ Implements the core appraisal form lifecycle, draft management, and version/hist
 
 ---
 
-## 2. File Upload Engine (GCP & Local Fallback)
+## 2. File Upload & Attachment Download Engine
 
-The **AttachmentService** implements an adaptive dual-storage workflow for processing PDF attachments (max 10MB):
+The **AttachmentService** & **SubmissionController** implement dual-storage file management and robust attachment ZIP package generation:
 
 ```
-                   PDF File Upload Request
-                             │
-                             ▼
-                ┌──────────────────────────┐
-                │    Validates File Type   │ <── Verifies extension is .pdf
-                └────────────┬─────────────┘
-                             │
-                             ▼
-                ┌──────────────────────────┐
-                │    Validates File Size   │ <── Enforces maximum size of 10MB
-                └────────────┬─────────────┘
-                             │
-                             ▼
-                ┌──────────────────────────┐
-                │   Computes Content Hash  │ <── SHA-256 hash of byte contents
-                └────────────┬─────────────┘
-                             │
-                             ▼
-                ┌──────────────────────────┐
-                │   Verifies File Duplicate│ <── Rejects if uploader already has hash
-                └────────────┬─────────────┘
-                             │
-                             ▼
-                ┌──────────────────────────┐
-                │   GCP Storage Enabled?   │
-                └──────┬────────────┬──────┘
-                       │            │
-              (Yes) ───┘            └─── (No / Fail)
-               ▼                         ▼
- ┌──────────────────────────┐   ┌──────────────────────────┐
- │ Upload to GCP bucket     │   │ Save to local disk path  │
- │ Return Google Cloud URL  │   │ Return relative local URL│
- └──────────────────────────┘   └──────────────────────────┘
+                   Attachment Package Generation Workflow
+                                     │
+                                     ▼
+                ┌──────────────────────────────────────────┐
+                │ Scan Submission Payloads for Attachments │
+                │ (attachments, tablesData, & valuesData) │
+                └────────────────────┬─────────────────────┘
+                                     │
+                                     ▼
+                ┌──────────────────────────────────────────┐
+                │    Deduplicate Unique Attachment List    │
+                └────────────────────┬─────────────────────┘
+                                     │
+                                     ▼
+                ┌──────────────────────────────────────────┐
+                │ Parse Storage URL / Object Key Path      │
+                │ (Strips GCP bucket prefixes, cleans path)│
+                └────────────────────┬─────────────────────┘
+                                     │
+                                     ▼
+                ┌──────────────────────────────────────────┐
+                │ Direct / Relative File Resolution Check  │
+                └──────────┬────────────────────┬──────────┘
+                           │                    │
+                    (File Found)         (File Not Found)
+                           │                    │
+                           ▼                    ▼
+                ┌────────────────────┐ ┌───────────────────────────────────┐
+                │ Stream File to ZIP │ │ Fuzzy Normalized Filename Search  │
+                └────────────────────┘ │ (Strips UUIDs, spaces/punctuation)│
+                                       └─────────────────┬─────────────────┘
+                                                         │
+                                                  (Match Found)
+                                                         │
+                                                         ▼
+                                               ┌────────────────────┐
+                                               │ Stream File to ZIP │
+                                               └────────────────────┘
 ```
 
-### Key Upload Mechanics:
+### Key Upload & Attachment Package Mechanics:
 1. **Deduplication**: On upload, the service calculates the SHA-256 checksum of the file bytes. It builds the upload path as:
    `users/<userKey_hash>/attachments/<content_sha256>.pdf`
    If the file already exists at this path, the service rejects the request with an error to prevent duplicate storage.
-2. **Multiple Upload support**: `uploadFiles` handles bulk uploads of files. It verifies that all files are PDFs and do not exceed the 10MB limit, then processes them sequentially.
-3. **Ownership Verification for Deletes**: When a user attempts to delete an attachment (via `deleteFile`), the service extracts the object name from the URL, computes the current user's key hash, and verifies that the file prefix matches `users/<currentUserKey_hash>/attachments/`. If it does not match, it throws `You can only delete your own uploaded files.` to prevent unauthorized deletions.
-4. **Dynamic URL Resolution for VM/Local Deployments**: 
+2. **Multi-Source Payload Scanning**: When generating bulk ZIP downloads (`SubmissionController.downloadAttachments`), the backend recursively scans `attachments` (top-level array), `tablesData` (embedded table cell attachments), and `valuesData` (section field attachments) for both academic and administrative audit types, supporting `.pdf`, `.docx`, `.xlsx`, `.png`, `.jpg`, `.jpeg`, `.doc`, `.xls`, and `.zip` files.
+3. **Robust Path Sanitization & Fuzzy Filename Search**:
+   - Handles legacy GCP Cloud Storage URLs (`https://storage.googleapis.com/dypiu-schoolappraisal-uploads/users/...`), absolute server URLs, and relative paths (`/uploads/users/...`).
+   - Strips GCP bucket name prefixes (`dypiu-schoolappraisal-uploads/`) to extract clean object names starting from `users/...`.
+   - If direct path resolution fails, `LocalFileStorageService.downloadFile` executes a multi-candidate fuzzy filename search across `/app/uploads`. Normalization strips UUID prefixes and punctuation differences (spaces, underscores, hyphens) to guarantee 100% file retrieval across all school folders (`SOEMR`, `SOD`, `SOBB`, `SOCE`, `AO`, etc.).
+4. **Ownership Verification for Deletes**: When a user attempts to delete an attachment (via `deleteFile`), the service extracts the object name from the URL, computes the current user's key hash, and verifies that the file prefix matches `users/<currentUserKey_hash>/attachments/`. If it does not match, it throws `You can only delete your own uploaded files.` to prevent unauthorized deletions.
+5. **Dynamic URL Resolution for VM/Local Deployments**: 
    When running the application with `GCP_ENABLED: false` (e.g., on a local VM), database records migrated from GCP will still contain absolute GCS URLs starting with `https://storage.googleapis.com/...`. 
    To handle this seamlessly without manual SQL updates or affecting GCP production, the backend intercepts Jackson serialization at the JPA level inside the `Submission` and `Snapshot` models using custom getters. 
    - These getters route their JSON values (`valuesData`, `tablesData`, and `attachments`) through the `UrlPostProcessor` utility.

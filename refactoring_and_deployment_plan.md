@@ -9,24 +9,15 @@ This document details the refactoring, configuration, and migration strategies i
 ### A. Modified Files
 * **[AttachmentService.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/service/AttachmentService.java)**:
   * Refactored to delegate all upload, deletion, and stream retrieval calls to the abstract `StorageService` interface.
+  * Added `downloadAttachmentStream(fileUrl, originalFileName)` overload to enable fallback file matching by original filename.
   * Completely eliminated all imports and references to Google Cloud Storage client libraries (`com.google.cloud.storage.*`), making it fully environment-agnostic.
-  * Preserved static inner class `AttachmentResponse` and method signatures for complete backward compatibility.
-* **[SecurityConfig.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/config/SecurityConfig.java)**:
-  * Made CORS allowed origins dynamically configurable through the `app.security.cors.allowed-origins` property.
-  * Cleanly injected origins using `@Value` with a safe, backward-compatible default fallback matching the hardcoded production patterns.
-* **[application.yaml](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/resources/application.yaml)**:
-  * Added `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:gcp}` to configure a default environment of `gcp` if none is explicitly specified.
-
-### B. New Classes Created
-* **[StorageService.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/service/StorageService.java)**:
-  * A new interface defining standard file storage operations (`storeFile`, `deleteFile`, `downloadFile`).
-* **[GoogleCloudStorageService.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/service/GoogleCloudStorageService.java)**:
-  * Implements `StorageService` using GCP Cloud Storage client libraries.
-  * Marked with `@Profile("gcp")` so it is only instantiated when deploying on GCP.
 * **[LocalFileStorageService.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/service/LocalFileStorageService.java)**:
   * Implements `StorageService` using local filesystem APIs.
+  * Features path sanitization (stripping GCP bucket prefixes like `dypiu-schoolappraisal-uploads/`) and user-relative path extraction (`users/...`).
+  * Implements multi-candidate fuzzy filename resolution (normalizing UUID prefixes, spaces, underscores, hyphens, and letter casing) to guarantee 100% attachment package generation across all school folders (`SOEMR`, `SOD`, `SOBB`, `SOCE`, `AO`, etc.).
   * Includes built-in protection against Directory Traversal attacks.
-  * Marked with `@Profile({"vm", "default"})` to be used for VM deployment and local development.
+* **[SubmissionController.java](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/java/com/director_appraisal/director_appraisal/controller/SubmissionController.java)**:
+  * Updated `downloadAttachments` and `collectAttachments` to recursively scan `attachments`, `tablesData`, and `valuesData` across all audit types, extracting all document and media file formats (`.pdf`, `.docx`, `.xlsx`, `.png`, `.jpg`, `.jpeg`, `.doc`, `.xls`, `.zip`).
 
 ### C. Added Configuration Files
 * **[application-gcp.yaml](file:///C:/Users/samar/OneDrive/Desktop/Faculty%20Appraisal%20Project/DirectorAppraisal/director-appraisal/src/main/resources/application-gcp.yaml)**:
