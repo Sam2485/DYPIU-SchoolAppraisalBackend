@@ -20,14 +20,11 @@ public class UrlPostProcessor {
             return json;
         }
         
-        // If GCP is disabled (on VM), rewrite absolute GCS URLs to local relative paths
-        // Example: https://storage.googleapis.com/schoolappraisal-attachments/users/... -> /uploads/users/...
-        String pattern1 = "https://storage.googleapis.com/" + bucketName + "/";
-        String res = json.replace(pattern1, "/uploads/");
+        // Rewrite any Google Storage URL (regardless of bucket name) to local /uploads/ path
+        String res = json.replaceAll("https://storage\\.googleapis\\.com/[^/\"]+/", "/uploads/");
         
-        // Fallback replacements for other common bucket name patterns
-        res = res.replace("https://storage.googleapis.com/schoolappraisal-attachments/", "/uploads/");
-        res = res.replace("https://storage.googleapis.com/director-appraisal-attachments/", "/uploads/");
+        // Ensure any relative users/ attachment path starts with /uploads/
+        res = res.replaceAll("\"(?:/)?users/", "\"/uploads/users/");
         
         return res;
     }
