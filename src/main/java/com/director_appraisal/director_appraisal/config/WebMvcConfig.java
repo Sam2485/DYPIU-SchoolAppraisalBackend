@@ -16,7 +16,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        Path uploadDir = Paths.get(localUploadPath).toAbsolutePath().normalize();
+        String effectivePath = resolveEffectiveUploadPath(localUploadPath);
+        Path uploadDir = Paths.get(effectivePath).toAbsolutePath().normalize();
         String uploadPath = uploadDir.toString().replace("\\", "/");
         if (!uploadPath.endsWith("/")) {
             uploadPath += "/";
@@ -32,5 +33,22 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(locations.toArray(new String[0]));
+    }
+
+    private static String resolveEffectiveUploadPath(String configuredPath) {
+        String clean = configuredPath != null ? configuredPath.trim() : "";
+        if (clean.startsWith("\"") && clean.endsWith("\"")) clean = clean.substring(1, clean.length() - 1);
+        if (clean.startsWith("'") && clean.endsWith("'")) clean = clean.substring(1, clean.length() - 1);
+
+        if (!clean.isBlank() && !clean.equalsIgnoreCase("./uploads") && !clean.equalsIgnoreCase("/app/uploads")) {
+            return clean;
+        }
+
+        Path testDir = Paths.get("/app/uploads-test");
+        if (java.nio.file.Files.exists(testDir) && java.nio.file.Files.isDirectory(testDir)) {
+            return "/app/uploads-test";
+        }
+
+        return !clean.isBlank() ? clean : "/app/uploads";
     }
 }
