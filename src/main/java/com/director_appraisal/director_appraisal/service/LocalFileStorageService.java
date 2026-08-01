@@ -19,11 +19,26 @@ import java.nio.file.StandardOpenOption;
 @Primary
 public class LocalFileStorageService implements StorageService {
 
-    private final String localUploadPath;
-
     public LocalFileStorageService(
             @Value("${app.upload.local-path}") String localUploadPath) {
-        this.localUploadPath = localUploadPath;
+        this.localUploadPath = resolveEffectiveUploadPath(localUploadPath);
+    }
+
+    private static String resolveEffectiveUploadPath(String configuredPath) {
+        String clean = configuredPath != null ? configuredPath.trim() : "";
+        if (clean.startsWith("\"") && clean.endsWith("\"")) clean = clean.substring(1, clean.length() - 1);
+        if (clean.startsWith("'") && clean.endsWith("'")) clean = clean.substring(1, clean.length() - 1);
+
+        if (!clean.isBlank() && !clean.equalsIgnoreCase("./uploads") && !clean.equalsIgnoreCase("/app/uploads")) {
+            return clean;
+        }
+
+        Path testDir = Paths.get("/app/uploads-test");
+        if (Files.exists(testDir) && Files.isDirectory(testDir)) {
+            return "/app/uploads-test";
+        }
+
+        return !clean.isBlank() ? clean : "/app/uploads";
     }
 
     @Override

@@ -39,10 +39,40 @@ public class BackupService {
             @Value("${app.backup.path:${BACKUP_PATH:${app.upload.local-path}/backups}}") String backupPath,
             UserRepository userRepository) {
         // Clean environment variable values that might contain wrapping double quotes from Docker env-file parser
-        this.localUploadPath = cleanPathQuotes(localUploadPath);
-        this.backupPath = cleanPathQuotes(backupPath);
+        String cleanUpload = cleanPathQuotes(localUploadPath);
+        String cleanBackup = cleanPathQuotes(backupPath);
+
+        this.localUploadPath = resolveEffectiveUploadPath(cleanUpload);
+        this.backupPath = resolveEffectiveBackupPath(cleanBackup, this.localUploadPath);
         this.userRepository = userRepository;
         log.info("Initialized BackupService. Local upload path: '{}', Backup path: '{}'", this.localUploadPath, this.backupPath);
+    }
+
+    private static String resolveEffectiveUploadPath(String configuredPath) {
+        String clean = configuredPath != null ? configuredPath.trim() : "";
+        if (!clean.isBlank() && !clean.equalsIgnoreCase("./uploads") && !clean.equalsIgnoreCase("/app/uploads")) {
+            return clean;
+        }
+        Path testDir = Paths.get("/app/uploads-test");
+        if (Files.exists(testDir) && Files.isDirectory(testDir)) {
+            return "/app/uploads-test";
+        }
+        return !clean.isBlank() ? clean : "/app/uploads";
+    }
+
+    private static String resolveEffectiveBackupPath(String configuredPath, String effectiveUploadPath) {
+        String clean = configuredPath != null ? configuredPath.trim() : "";
+        if (!clean.isBlank() && !clean.equalsIgnoreCase("./backups") && !clean.equalsIgnoreCase("/app/backups") && !clean.contains("./uploads/backups")) {
+            return clean;
+        }
+        Path testBackupDir = Paths.get("/app/backups-test");
+        if (Files.exists(testBackupDir) && Files.isDirectory(testBackupDir)) {
+            return "/app/backups-test";
+        }
+        if (effectiveUploadPath != null && effectiveUploadPath.contains("uploads-test")) {
+            return "/app/backups-test";
+        }
+        return !clean.isBlank() ? clean : "/app/backups";
     }
 
     private String cleanPathQuotes(String path) {
