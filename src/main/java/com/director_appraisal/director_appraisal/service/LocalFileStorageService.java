@@ -19,6 +19,8 @@ import java.nio.file.StandardOpenOption;
 @Primary
 public class LocalFileStorageService implements StorageService {
 
+    private final String localUploadPath;
+
     public LocalFileStorageService(
             @Value("${app.upload.local-path}") String localUploadPath) {
         this.localUploadPath = resolveEffectiveUploadPath(localUploadPath);
