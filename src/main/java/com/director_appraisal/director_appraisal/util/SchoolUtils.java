@@ -15,6 +15,7 @@ public class SchoolUtils {
             "soaa",
             "soce",
             "soemr",
+            "sohss",
             // Spelling variations
             "school of computer science & applications",
             "school of computer science & application",
@@ -35,7 +36,9 @@ public class SchoolUtils {
             "school of engg. management and research",
             "school of engg. management & research",
             "school of engineering, management & research",
-            "school of engineering, management and research"
+            "school of engineering, management and research",
+            "school of humanities and social sciences",
+            "school of humanities & social sciences"
     );
 
     public static boolean isValidSchool(String school) {
@@ -57,7 +60,7 @@ public class SchoolUtils {
         if (s.contains("sobb") || s.contains("bio")) {
             return "SOBB";
         }
-        if (s.contains("somcs") || s.contains("somcs") || s.contains("media")) {
+        if (s.contains("somcs") || s.contains("media")) {
             return "SOMCS";
         }
         if (s.contains("sod") || s.contains("design")) {
@@ -72,6 +75,9 @@ public class SchoolUtils {
         if (s.contains("soemr") || s.contains("engineering, management") || s.contains("engineering management") || (s.contains("engg") && s.contains("management") && s.contains("research"))) {
             return "SOEMR";
         }
+        if (s.contains("sohss") || s.contains("humanities")) {
+            return "SOHSS";
+        }
         return school.trim().toUpperCase(Locale.ROOT); // fallback
     }
 
@@ -82,7 +88,7 @@ public class SchoolUtils {
         }
         return switch (canonical.toUpperCase(Locale.ROOT)) {
             case "SOCSEA", "SOBB", "SOCE", "SOEMR" -> "engineering";
-            case "SOCM", "SOMCS", "SOD", "SOAA" -> "nonEngineering";
+            case "SOCM", "SOMCS", "SOD", "SOAA", "SOHSS" -> "nonEngineering";
             default -> null;
         };
     }
