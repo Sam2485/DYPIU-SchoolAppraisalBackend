@@ -139,6 +139,16 @@ public class Submission {
         return allAuditorsSubmitted;
     }
 
+    @com.fasterxml.jackson.annotation.JsonGetter("auditorAssignmentStatus")
+    public java.util.List<java.util.Map<String, Object>> getAuditorAssignmentStatusForJson() {
+        return auditorAssignments;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("auditorReviews")
+    public java.util.List<java.util.Map<String, Object>> getAuditorReviewsForJson() {
+        return auditorAssignments;
+    }
+
     @Transient
     private Boolean nextCycleStarted;
 

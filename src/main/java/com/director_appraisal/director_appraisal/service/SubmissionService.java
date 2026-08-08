@@ -4024,10 +4024,11 @@ public class SubmissionService {
             assMap.put("auditorId", assignment.getAuditorId());
             assMap.put("auditorName", assignment.getAuditorName());
             assMap.put("auditorEmail", assignment.getAuditorEmail());
-            assMap.put("auditorType", assignment.getAuditorType());
+            assMap.put("auditorType", assignment.getAuditorType() != null ? assignment.getAuditorType().toLowerCase() : "internal");
             assMap.put("auditCategory", assignment.getCategory());
             assMap.put("post", assignment.getPost());
-            assMap.put("status", assignment.getStatus().toLowerCase());
+            assMap.put("school", "academic".equalsIgnoreCase(submission.getAuditType()) ? (assignment.getPost() != null ? assignment.getPost() : submission.getSchool()) : submission.getSchool());
+            assMap.put("status", assignment.getStatus() != null ? assignment.getStatus().toLowerCase() : "pending");
             assMap.put("submittedAt", assignment.getSubmittedAt() != null ? assignment.getSubmittedAt().toString() : null);
 
             assMap.put("reviewStatus", assignment.getReviewStatus());
