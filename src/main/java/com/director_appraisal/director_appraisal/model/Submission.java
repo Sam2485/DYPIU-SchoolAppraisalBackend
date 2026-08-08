@@ -173,6 +173,10 @@ public class Submission {
         return reportCategory != null ? reportCategory.toUpperCase() : null;
     }
 
+    public String getStatus() {
+        return status != null ? status : "DRAFT";
+    }
+
     @com.fasterxml.jackson.annotation.JsonGetter("academicYear")
     public String getAcademicYearForJson() {
         return academicYear != null ? academicYear : auditCycle;
