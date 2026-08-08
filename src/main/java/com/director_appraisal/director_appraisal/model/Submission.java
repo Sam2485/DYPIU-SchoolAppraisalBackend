@@ -168,6 +168,21 @@ public class Submission {
         return academicYear != null ? academicYear : auditCycle;
     }
 
+    @com.fasterxml.jackson.annotation.JsonGetter("submittedOn")
+    public LocalDateTime getSubmittedOnForJson() {
+        return submittedAt;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("post")
+    public String getPostForJson() {
+        return administrativePost;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("department")
+    public String getDepartmentForJson() {
+        return administrativePost;
+    }
+
     @com.fasterxml.jackson.annotation.JsonGetter("schoolGroup")
     public String getSchoolGroupForJson() {
         return schoolGroup;

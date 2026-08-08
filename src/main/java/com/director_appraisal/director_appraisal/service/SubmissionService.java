@@ -3819,7 +3819,7 @@ public class SubmissionService {
                 .filter(a -> "SUBMITTED".equalsIgnoreCase(a.getStatus()) && !Boolean.TRUE.equals(a.getRequiresAuditorResubmission()))
                 .count();
 
-        allSubmitted = (totalGroup > 0 && completedGroup == totalGroup) || (totalGroup == 0);
+        allSubmitted = (totalGroup > 0 && completedGroup == totalGroup);
 
         if (allSubmitted) {
             submission.setStatus("AUDITOR_COMPLETED");
@@ -4072,6 +4072,27 @@ public class SubmissionService {
         
         int pending = total - submitted;
         boolean allSubmitted = (total > 0 && pending == 0);
+
+        if (submission.getForwardedAuditorType() == null || submission.getForwardedAuditorType().isBlank()) {
+            if (!currentValidAssignments.isEmpty() && currentValidAssignments.get(0).getAuditorType() != null) {
+                submission.setForwardedAuditorType(currentValidAssignments.get(0).getAuditorType().toLowerCase());
+            } else if (submission.getReportCategory() != null && "EXTERNAL".equalsIgnoreCase(submission.getReportCategory())) {
+                submission.setForwardedAuditorType("external");
+            } else if (submission.getStatus() != null && (submission.getStatus().toUpperCase().contains("EXTERNAL") || "FORWARDED_TO_EXTERNAL_AUDITOR".equalsIgnoreCase(submission.getStatus()) || "EXTERNAL_AUDITOR_COMPLETED".equalsIgnoreCase(submission.getStatus()))) {
+                submission.setForwardedAuditorType("external");
+            } else if (submission.getStatus() != null && List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", "APPROVED", "FINAL", "FORWARDED_TO_INTERNAL_AUDITOR", "INTERNAL_AUDITOR_COMPLETED").contains(submission.getStatus().toUpperCase())) {
+                submission.setForwardedAuditorType("internal");
+            }
+        }
+
+        if (submission.getAuditorReviewedOn() == null && List.of("AUDITOR_COMPLETED", "APPROVED", "FINAL").contains(submission.getStatus() != null ? submission.getStatus().toUpperCase() : "")) {
+            LocalDateTime latestAuditorSubmit = currentValidAssignments.stream()
+                    .map(SubmissionAuditorAssignment::getSubmittedAt)
+                    .filter(java.util.Objects::nonNull)
+                    .max(LocalDateTime::compareTo)
+                    .orElse(submission.getReviewedAt() != null ? submission.getReviewedAt() : (submission.getApprovedAt() != null ? submission.getApprovedAt() : submission.getSubmittedAt()));
+            submission.setAuditorReviewedOn(latestAuditorSubmit);
+        }
         
         submission.setAllAuditorsSubmitted(allSubmitted);
         submission.setAllAssignedAuditorsSubmitted(allSubmitted);

@@ -401,9 +401,7 @@ public class UserController {
     }
 
     private boolean isManagedUser(User user) {
-        String role = normalize(user.getRole());
-        String accountType = normalize(user.getAccountType());
-        return "director".equals(role) || "administrative".equals(role) || "auditor".equals(accountType) || (role != null && role.contains("auditor"));
+        return user != null && !Boolean.TRUE.equals(user.getDeleted());
     }
 
     private Map<String, Object> toUserResponse(User user) {
@@ -446,6 +444,10 @@ public class UserController {
 
         String schoolVal = isReviewerRole(role) ? null : user.getSchool();
         List<String> adminPosts = getAdministrativePosts(user);
+        List<String> schoolsList = user.getSchoolsList();
+        if (schoolsList == null || schoolsList.isEmpty()) {
+            schoolsList = schoolVal != null && !schoolVal.isBlank() ? List.of(schoolVal) : List.of();
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", user.getId());
@@ -456,8 +458,9 @@ public class UserController {
         response.put("role", role);
         response.put("school", schoolVal);
         response.put("schoolName", schoolVal);
+        response.put("schools", schoolsList);
         response.put("designation", user.getDesignation());
-        response.put("post", canonicalAdministrativePost(user.getPost() != null ? user.getPost() : ("administrative".equals(role) ? getPostForDesignation(user.getDesignation()) : null)));
+        response.put("post", canonicalAdministrativePost(user.getPost() != null ? user.getPost() : getPostForDesignation(user.getDesignation())));
         response.put("administrativePosts", adminPosts);
         response.put("assignedPosts", adminPosts);
         response.put("posts", adminPosts);
@@ -522,9 +525,10 @@ public class UserController {
             String post = canonicalAdministrativePost(user.getPost());
             return post != null ? List.of(post) : List.of();
         }
-        if ("administrative".equals(role) && user.getPost() != null) {
-            String post = canonicalAdministrativePost(user.getPost());
-            return post != null ? List.of(post) : List.of();
+        String postFromDesignation = getPostForDesignation(user.getDesignation());
+        String resolvedPost = canonicalAdministrativePost(user.getPost() != null ? user.getPost() : postFromDesignation);
+        if (resolvedPost != null && !resolvedPost.isBlank()) {
+            return List.of(resolvedPost);
         }
         return List.of();
     }
