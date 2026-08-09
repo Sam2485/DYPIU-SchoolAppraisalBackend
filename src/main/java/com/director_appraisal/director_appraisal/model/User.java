@@ -41,6 +41,7 @@ public class User implements UserDetails {
     private String auditorRole;
     private String post;
     private String schools;
+    private String avatarUrl;
 
     public List<String> getSchoolsList() {
         if (schools == null || schools.isBlank()) {

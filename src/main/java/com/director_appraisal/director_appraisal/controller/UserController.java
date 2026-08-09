@@ -4,6 +4,7 @@ import com.director_appraisal.director_appraisal.model.User;
 import com.director_appraisal.director_appraisal.model.UserAdministrativePost;
 import com.director_appraisal.director_appraisal.repository.UserAdministrativePostRepository;
 import com.director_appraisal.director_appraisal.service.UserService;
+import com.director_appraisal.director_appraisal.service.AttachmentService;
 import com.director_appraisal.director_appraisal.util.SchoolUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +42,7 @@ public class UserController {
 
     private final UserService userService;
     private final UserAdministrativePostRepository userAdministrativePostRepository;
+    private final AttachmentService attachmentService;
 
     @GetMapping
     public ResponseEntity<?> getUsers(Authentication authentication) {
@@ -453,6 +456,7 @@ public class UserController {
         response.put("id", user.getId());
         response.put("name", user.getName());
         response.put("email", user.getEmail());
+        response.put("avatarUrl", user.getAvatarUrl());
         response.put("category", category);
         response.put("auditCategory", category);
         response.put("role", role);
@@ -592,6 +596,205 @@ public class UserController {
         String accountType, String category, String auditorType, String auditorRole, String post,
         List<String> administrativePosts, List<String> schools
     ) {}
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getMyProfile(Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            return error(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+        User user = userService.findByEmail(currentUser.getEmail()).orElse(currentUser);
+        return ResponseEntity.ok(Map.of("data", toSelfUserProfileResponse(user)));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMyProfile(Authentication authentication, @RequestBody(required = false) UpdateSelfProfileRequest request) {
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            return error(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+        Optional<User> userOpt = userService.findByEmail(currentUser.getEmail());
+        if (userOpt.isEmpty()) {
+            return error(HttpStatus.NOT_FOUND, "User not found.");
+        }
+        User user = userOpt.get();
+
+        if (request == null) {
+            return error(HttpStatus.BAD_REQUEST, "Request body is required.");
+        }
+
+        String name = clean(request.getName());
+        String email = normalize(request.getEmail());
+
+        if (name != null) {
+            if (name.isBlank()) {
+                return error(HttpStatus.BAD_REQUEST, "Name cannot be empty.");
+            }
+            user.setName(name);
+        }
+
+        if (email != null) {
+            if (email.isBlank()) {
+                return error(HttpStatus.BAD_REQUEST, "Email cannot be empty.");
+            }
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                return error(HttpStatus.BAD_REQUEST, "Email must be valid.");
+            }
+            Optional<User> existingWithEmail = userService.findByEmail(email);
+            if (existingWithEmail.isPresent() && !existingWithEmail.get().getId().equals(user.getId())) {
+                return error(HttpStatus.CONFLICT, "Email already exists.");
+            }
+            user.setEmail(email);
+        }
+
+        User updatedUser = userService.updateUser(user, null);
+        return ResponseEntity.ok(Map.of("data", toSelfUserProfileResponse(updatedUser)));
+    }
+
+    @PostMapping("/me/avatar")
+    public ResponseEntity<?> uploadAvatar(
+            Authentication authentication,
+            @RequestParam(value = "avatar", required = false) MultipartFile avatarFile,
+            @RequestParam(value = "file", required = false) MultipartFile fallbackFile) {
+        
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            return error(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+        
+        MultipartFile file = avatarFile != null ? avatarFile : fallbackFile;
+        if (file == null || file.isEmpty()) {
+            return error(HttpStatus.BAD_REQUEST, "Avatar image file is required.");
+        }
+
+        // Validate file size (max 5MB)
+        long maxSize = 5L * 1024L * 1024L;
+        if (file.getSize() > maxSize) {
+            return error(HttpStatus.BAD_REQUEST, "Avatar size exceeds maximum limit of 5MB.");
+        }
+
+        // Validate image type
+        String contentType = file.getContentType();
+        String originalFilename = file.getOriginalFilename();
+        boolean isImage = (contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/"))
+                || isImageFilename(originalFilename);
+        if (!isImage) {
+            return error(HttpStatus.BAD_REQUEST, "Only image files (JPG, PNG, WebP, GIF) are allowed for avatar.");
+        }
+
+        Optional<User> userOpt = userService.findByEmail(currentUser.getEmail());
+        if (userOpt.isEmpty()) {
+            return error(HttpStatus.NOT_FOUND, "User not found.");
+        }
+        User user = userOpt.get();
+
+        // Remove old avatar file if present
+        if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+            try {
+                attachmentService.deleteFile(user.getAvatarUrl());
+            } catch (Exception e) {
+                System.err.println("Non-critical error removing previous avatar: " + e.getMessage());
+            }
+        }
+
+        try {
+            AttachmentService.AttachmentResponse uploadResponse = attachmentService.uploadFile(file);
+            String avatarUrl = uploadResponse.getUrl();
+            user.setAvatarUrl(avatarUrl);
+            userService.updateUser(user, null);
+
+            return ResponseEntity.ok(Map.of("data", Map.of("avatarUrl", avatarUrl)));
+        } catch (Exception e) {
+            return error(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload avatar: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/me/avatar")
+    public ResponseEntity<?> removeAvatar(Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            return deleteError(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+        Optional<User> userOpt = userService.findByEmail(currentUser.getEmail());
+        if (userOpt.isEmpty()) {
+            return deleteError(HttpStatus.NOT_FOUND, "User not found.");
+        }
+        User user = userOpt.get();
+
+        if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+            try {
+                attachmentService.deleteFile(user.getAvatarUrl());
+            } catch (Exception e) {
+                System.err.println("Non-critical error deleting avatar file: " + e.getMessage());
+            }
+        }
+
+        user.setAvatarUrl(null);
+        userService.updateUser(user, null);
+
+        Map<String, Object> dataMap = new LinkedHashMap<>();
+        dataMap.put("avatarUrl", null);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Avatar removed successfully",
+                "data", dataMap
+        ));
+    }
+
+    private User getCurrentUser(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User user) {
+            return user;
+        }
+        return null;
+    }
+
+    private boolean isImageFilename(String filename) {
+        if (filename == null || filename.isBlank()) return false;
+        String lower = filename.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
+                || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".svg");
+    }
+
+    private Map<String, Object> toSelfUserProfileResponse(User user) {
+        String role = normalize(user.getRole());
+        String accountType = normalize(user.getAccountType());
+        if (isBlank(accountType)) {
+            accountType = (role != null && role.toLowerCase().contains("auditor")) ? "auditor" : "user";
+        }
+        String schoolVal = isReviewerRole(role) ? null : user.getSchool();
+        List<String> adminPosts = getAdministrativePosts(user);
+        List<String> schoolsList = user.getSchoolsList();
+        if (schoolsList == null || schoolsList.isEmpty()) {
+            schoolsList = schoolVal != null && !schoolVal.isBlank() ? List.of(schoolVal) : List.of();
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", user.getId());
+        response.put("name", user.getName());
+        response.put("email", user.getEmail());
+        response.put("avatarUrl", user.getAvatarUrl());
+        response.put("designation", user.getDesignation());
+        response.put("school", schoolVal);
+        response.put("schoolName", schoolVal);
+        response.put("schools", schoolsList);
+        response.put("role", role);
+        response.put("accountType", accountType);
+        response.put("category", user.getCategory());
+        response.put("auditorType", user.getAuditorType());
+        response.put("auditorRole", user.getAuditorRole());
+        response.put("post", canonicalAdministrativePost(user.getPost() != null ? user.getPost() : getPostForDesignation(user.getDesignation())));
+        response.put("administrativePosts", adminPosts);
+        response.put("assignedPosts", adminPosts);
+        response.put("posts", adminPosts);
+        response.put("status", user.getStatus() != null ? user.getStatus() : "active");
+        return response;
+    }
+
+    @Data
+    public static class UpdateSelfProfileRequest {
+        private String name;
+        private String email;
+    }
 
     @Data
     public static class CreateUserRequest {
