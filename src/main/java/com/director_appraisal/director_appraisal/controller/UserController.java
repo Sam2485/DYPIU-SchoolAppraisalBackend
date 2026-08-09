@@ -790,6 +790,57 @@ public class UserController {
         return response;
     }
 
+    @PutMapping("/me/password")
+    public ResponseEntity<?> changeMyPassword(Authentication authentication, @RequestBody(required = false) UpdateSelfPasswordRequest request) {
+        User currentUser = getCurrentUser(authentication);
+        if (currentUser == null) {
+            return error(HttpStatus.UNAUTHORIZED, "Authentication is required.");
+        }
+        Optional<User> userOpt = userService.findByEmail(currentUser.getEmail());
+        if (userOpt.isEmpty()) {
+            return error(HttpStatus.NOT_FOUND, "User not found.");
+        }
+        User user = userOpt.get();
+
+        if (request == null) {
+            return error(HttpStatus.BAD_REQUEST, "Request body is required.");
+        }
+
+        String currentPassword = request.getCurrentPassword();
+        String newPassword = request.getNewPassword();
+
+        if (isBlank(currentPassword)) {
+            return error(HttpStatus.BAD_REQUEST, "Current password is required.");
+        }
+        if (isBlank(newPassword)) {
+            return error(HttpStatus.BAD_REQUEST, "New password is required.");
+        }
+
+        // Verify current password
+        if (!userService.checkPassword(currentPassword, user.getPassword())) {
+            return error(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
+        }
+
+        // Validate new password length (minimum 8 characters)
+        if (newPassword.length() < 8) {
+            return error(HttpStatus.BAD_REQUEST, "New password must be at least 8 characters long.");
+        }
+
+        // Update password in database
+        userService.updateUser(user, newPassword);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Password updated successfully.",
+                "success", true
+        ));
+    }
+
+    @Data
+    public static class UpdateSelfPasswordRequest {
+        private String currentPassword;
+        private String newPassword;
+    }
+
     @Data
     public static class UpdateSelfProfileRequest {
         private String name;
