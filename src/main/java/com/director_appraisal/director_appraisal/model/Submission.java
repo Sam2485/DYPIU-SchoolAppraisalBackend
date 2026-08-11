@@ -276,6 +276,40 @@ public class Submission {
         return node;
     }
 
+    @com.fasterxml.jackson.annotation.JsonGetter("sectionProgress")
+    public java.util.Map<String, String> getSectionProgressForJson() {
+        return getAdministrativeProgressForJson();
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("contributionProgress")
+    public java.util.Map<String, String> getContributionProgressForJson() {
+        return getAdministrativeProgressForJson();
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("contributorPosts")
+    public java.util.List<String> getContributorPostsForJson() {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        java.util.Map<String, String> progress = getAdministrativeProgressForJson();
+        if (progress != null) {
+            progress.forEach((post, statusVal) -> {
+                if (statusVal != null && java.util.List.of("SUBMITTED", "APPROVED").contains(statusVal.toUpperCase())) {
+                    list.add(post);
+                }
+            });
+        }
+        return list;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("values")
+    public String getValuesForJson() {
+        return getValuesData();
+    }
+
+    @com.fasterxml.jackson.annotation.JsonGetter("tables")
+    public String getTablesForJson() {
+        return getTablesData();
+    }
+
     public String getValuesData() {
         return com.director_appraisal.director_appraisal.util.UrlPostProcessor.process(valuesData);
     }

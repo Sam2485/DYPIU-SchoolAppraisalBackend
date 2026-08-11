@@ -31,7 +31,7 @@ public class SubmissionService {
     private static final String STATUS_FINAL = "FINAL";
     private static final List<String> LOCKED_STATUSES = List.of("UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> REVIEWER_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", STATUS_APPROVED_LEGACY, STATUS_FINAL);
-    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "FORWARDED_TO_INTERNAL_AUDITOR", "INTERNAL_AUDITOR_COMPLETED", "FORWARDED_TO_EXTERNAL_AUDITOR", "AUDITOR_COMPLETED", "EXTERNAL_AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
+    private static final List<String> IQAC_VISIBLE_STATUSES = List.of("DRAFT", "SUBMITTED", "UNDER_REVIEW", "FORWARDED_TO_INTERNAL_AUDITOR", "INTERNAL_AUDITOR_COMPLETED", "FORWARDED_TO_EXTERNAL_AUDITOR", "AUDITOR_COMPLETED", "EXTERNAL_AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> VC_VISIBLE_STATUSES = List.of("AUDITOR_COMPLETED", "EXTERNAL_AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> NORMALIZED_TABLE_STATUSES = List.of("SUBMITTED", "UNDER_REVIEW", "AUDITOR_COMPLETED", STATUS_APPROVED_LEGACY, STATUS_FINAL);
     private static final List<String> EDITABLE_CYCLE_STATUSES = List.of("DRAFT", "SUBMITTED", "SENT_BACK");
@@ -2178,6 +2178,21 @@ public class SubmissionService {
         approval.put("approvedAt", LocalDateTime.now().toString());
         approvals.set(post, approval);
         values.set("administrativeApprovals", approvals);
+
+        com.fasterxml.jackson.databind.JsonNode existingStatusNode = values.get("__administrativeSubmissionStatus");
+        com.fasterxml.jackson.databind.node.ObjectNode statusNode = (existingStatusNode != null && existingStatusNode.isObject())
+                ? (com.fasterxml.jackson.databind.node.ObjectNode) existingStatusNode
+                : mapper.createObjectNode();
+        com.fasterxml.jackson.databind.node.ObjectNode postStatus = mapper.createObjectNode();
+        postStatus.put("submitted", true);
+        postStatus.put("submittedAt", LocalDateTime.now().toString());
+        postStatus.put("name", approver.getName());
+        postStatus.put("email", approver.getEmail());
+        if (approver.getId() != null) {
+            postStatus.put("userId", approver.getId());
+        }
+        statusNode.set(post, postStatus);
+        values.set("__administrativeSubmissionStatus", statusNode);
     }
 
     private String mergeAttachmentMetadata(String existingJson, String incomingJson) {
@@ -3719,6 +3734,12 @@ public class SubmissionService {
         if (request.getPosts() != null) {
             for (String p : request.getPosts()) {
                 String cp = canonicalAdministrativePost(p);
+                if (cp != null) postsToSubmit.add(cp);
+            }
+        }
+        if (request.getAssignmentKeys() != null) {
+            for (String k : request.getAssignmentKeys()) {
+                String cp = canonicalAdministrativePost(k);
                 if (cp != null) postsToSubmit.add(cp);
             }
         }
