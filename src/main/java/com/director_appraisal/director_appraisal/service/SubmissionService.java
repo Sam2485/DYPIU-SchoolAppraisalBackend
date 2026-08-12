@@ -1723,6 +1723,20 @@ public class SubmissionService {
                 .createdFromVersion(approved.getVersion())
                 .forwardedAuditorType("external")
                 .forwardedAuditCategory(approved.getAuditType())
+                .auditorReviewedOn(null)
+                .auditorReviewedBy(null)
+                .auditorReviewedByRole(null)
+                .auditorReviewedByDesignation(null)
+                .approvedByName(null)
+                .approvedAt(null)
+                .approvedByUserId(null)
+                .approvedByRole(null)
+                .approvedByDesignation(null)
+                .remarks(null)
+                .auditorCorrectionRequested(null)
+                .correctionRequestedForAuditor(null)
+                .requiresAuditorResubmission(null)
+                .auditorCorrectionMessage(null)
                 .hasNextCycle(false)
                 .nextVersionId(null)
                 .build();
@@ -1733,6 +1747,7 @@ public class SubmissionService {
         approved.setNextVersionId(saved.getId());
         submissionRepository.save(approved);
 
+        autoForwardToExternalAuditors(saved);
         persistDataForStatus(saved);
         return saved;
     }
@@ -3116,8 +3131,16 @@ public class SubmissionService {
                 return json;
             }
 
-            removeCurrentCycleReviewFields((com.fasterxml.jackson.databind.node.ObjectNode) root, auditType);
-            return mapper.writeValueAsString(root);
+            com.fasterxml.jackson.databind.node.ObjectNode obj = (com.fasterxml.jackson.databind.node.ObjectNode) root;
+            obj.remove("__auditSignOff");
+            obj.remove("auditSignOff");
+            obj.remove("auditedBy");
+            obj.remove("approvedBy");
+            obj.remove("administrativeApprovals");
+            obj.remove("__administrativeSubmissionStatus");
+
+            removeCurrentCycleReviewFields(obj, auditType);
+            return mapper.writeValueAsString(obj);
         } catch (Exception e) {
             return json;
         }
