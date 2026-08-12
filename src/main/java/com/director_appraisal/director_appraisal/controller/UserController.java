@@ -78,9 +78,12 @@ public class UserController {
             return error(HttpStatus.BAD_REQUEST, "Invalid user id");
         }
 
-        return userService.findById(userId)
-                .map(user -> ResponseEntity.ok(Map.of("user", toUserResponse(user))))
-                .orElseGet(() -> error(HttpStatus.NOT_FOUND, "User not found"));
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return error(HttpStatus.NOT_FOUND, "User not found");
+        }
+
+        return ResponseEntity.ok(Map.of("user", toUserResponse(userOpt.get())));
     }
 
     @PostMapping
