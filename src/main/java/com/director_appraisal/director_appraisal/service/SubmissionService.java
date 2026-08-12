@@ -1137,6 +1137,8 @@ public class SubmissionService {
             System.err.println("Error injecting auditor sign off: " + e.getMessage());
             return valuesData;
         }
+    }
+
     public List<Submission> getAllSubmissionsForUser(User user, String targetAcademicYear) {
         List<Submission> all = getAllSubmissionsForUser(user);
         if (targetAcademicYear == null || targetAcademicYear.isBlank() || "all".equalsIgnoreCase(targetAcademicYear.trim())) {
