@@ -45,18 +45,42 @@ public class UserController {
     private final AttachmentService attachmentService;
 
     @GetMapping
-    public ResponseEntity<?> getUsers(Authentication authentication) {
+    public ResponseEntity<?> getUsers(
+            Authentication authentication,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDeleted) {
         ResponseEntity<?> authorizationError = authorizeIqac(authentication);
         if (authorizationError != null) {
             return authorizationError;
         }
 
-        List<Map<String, Object>> users = userService.findAllUsers().stream()
-                .filter(this::isManagedUser)
+        List<User> sourceList = includeDeleted
+                ? userService.findAllUsers()
+                : userService.findAllUsers().stream().filter(this::isManagedUser).toList();
+
+        List<Map<String, Object>> users = sourceList.stream()
                 .map(this::toUserResponse)
                 .toList();
 
         return ResponseEntity.ok(Map.of("users", users));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUserById(Authentication authentication, @PathVariable String id) {
+        ResponseEntity<?> authorizationError = authorizeIqac(authentication);
+        if (authorizationError != null) {
+            return authorizationError;
+        }
+
+        Long userId;
+        try {
+            userId = Long.valueOf(id);
+        } catch (NumberFormatException e) {
+            return error(HttpStatus.BAD_REQUEST, "Invalid user id");
+        }
+
+        return userService.findById(userId)
+                .map(user -> ResponseEntity.ok(Map.of("user", toUserResponse(user))))
+                .orElseGet(() -> error(HttpStatus.NOT_FOUND, "User not found"));
     }
 
     @PostMapping
@@ -472,7 +496,8 @@ public class UserController {
         response.put("accountType", accountType);
         response.put("auditorType", auditorType);
         response.put("auditorRole", user.getAuditorRole());
-        response.put("status", user.getStatus() != null ? user.getStatus() : "active");
+        response.put("status", Boolean.TRUE.equals(user.getDeleted()) ? "deleted" : (user.getStatus() != null ? user.getStatus() : "active"));
+        response.put("deleted", Boolean.TRUE.equals(user.getDeleted()));
         return response;
     }
 

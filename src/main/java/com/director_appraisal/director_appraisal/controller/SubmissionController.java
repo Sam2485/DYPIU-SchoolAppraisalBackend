@@ -245,9 +245,13 @@ public class SubmissionController {
 
     @GetMapping("/all")
     @PreAuthorize("hasAnyRole('ROLE_VICE-CHANCELLOR', 'ROLE_IQAC', 'ROLE_ACADEMIC-INTERNAL-AUDITOR', 'ROLE_ACADEMIC-EXTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-INTERNAL-AUDITOR', 'ROLE_ADMINISTRATIVE-EXTERNAL-AUDITOR')")
-    public ResponseEntity<List<Submission>> getAllSubmissions() {
+    public ResponseEntity<List<Submission>> getAllSubmissions(
+            @RequestParam(required = false) String academicYear,
+            @RequestParam(required = false) String auditCycle,
+            @RequestParam(required = false) String cycleId) {
         User user = getCurrentUserDetails();
-        List<Submission> submissions = submissionService.getAllSubmissionsForUser(user);
+        String requestedYear = firstNonBlank(academicYear, auditCycle, cycleId);
+        List<Submission> submissions = submissionService.getAllSubmissionsForUser(user, requestedYear);
         submissions.forEach(sub -> submissionService.populatePermissions(sub, user));
         return ResponseEntity.ok(submissions);
     }

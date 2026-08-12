@@ -125,15 +125,13 @@ public class UserService implements UserDetailsService {
             submissionService.deleteUserSubmissionsAndAttachments(user, currentAcademicYear);
         }
 
-        if (user.getId() != null) {
-            userAdministrativePostRepository.deleteByUserId(user.getId());
-        }
         if (user.getEmail() != null && !user.getEmail().isBlank()) {
             resetTokenRepository.deleteByEmail(user.getEmail().trim().toLowerCase());
         }
 
         user.setDeleted(true);
         user.setDeletedAt(LocalDateTime.now());
+        user.setStatus("deleted");
         userRepository.save(user);
         userRepository.flush();
     }

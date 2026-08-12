@@ -63,8 +63,12 @@ public class AcademicYearService {
 
         Map<String, Object> response = new java.util.LinkedHashMap<>();
         response.put("activeYear", activeYearLabel);
+        response.put("currentAcademicYear", activeYearLabel);
+        response.put("currentYear", activeYearLabel);
         response.put("compactActiveYear", toAuditCycle(activeYearLabel));
         response.put("availableYears", sortedYears);
+        response.put("academicYears", sortedYears);
+        response.put("years", sortedYears);
         return response;
     }
 
