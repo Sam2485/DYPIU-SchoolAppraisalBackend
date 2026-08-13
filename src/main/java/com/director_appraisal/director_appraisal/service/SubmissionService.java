@@ -3876,7 +3876,11 @@ public class SubmissionService {
         allSubmitted = (totalGroup > 0 && completedGroup == totalGroup);
 
         if (allSubmitted) {
-            submission.setStatus("AUDITOR_COMPLETED");
+            if ("external".equalsIgnoreCase(currentType) || "EXTERNAL".equalsIgnoreCase(submission.getReportCategory())) {
+                submission.setStatus("EXTERNAL_AUDITOR_COMPLETED");
+            } else {
+                submission.setStatus("AUDITOR_COMPLETED");
+            }
             submission.setAuditorReviewedBy(caller.getName());
             submission.setAuditorReviewedByEmail(caller.getEmail());
             submission.setAuditorReviewedByDesignation(caller.getDesignation());
@@ -3888,7 +3892,11 @@ public class SubmissionService {
             submission.setRequiresAuditorResubmission(false);
             submission.setAuditorResubmittedAt(submittedAt);
         } else {
-            submission.setStatus("UNDER_REVIEW");
+            if ("external".equalsIgnoreCase(currentType) || "EXTERNAL".equalsIgnoreCase(submission.getReportCategory())) {
+                submission.setStatus("FORWARDED_TO_EXTERNAL_AUDITOR");
+            } else {
+                submission.setStatus("FORWARDED_TO_INTERNAL_AUDITOR");
+            }
             boolean anyPendingCorrection = currentGroupAssignments.stream()
                     .anyMatch(a -> Boolean.TRUE.equals(a.getRequiresAuditorResubmission()));
             if (anyPendingCorrection) {
