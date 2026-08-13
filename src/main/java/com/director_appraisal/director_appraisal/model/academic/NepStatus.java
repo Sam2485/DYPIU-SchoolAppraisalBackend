@@ -33,4 +33,7 @@ public class NepStatus {
     @Column(name = "link_document", columnDefinition = "TEXT")
     private String linkForTheDocument;
 
+    @Column(name = "sdg_address", columnDefinition = "TEXT")
+    private String sdgAddress;
+
 }
