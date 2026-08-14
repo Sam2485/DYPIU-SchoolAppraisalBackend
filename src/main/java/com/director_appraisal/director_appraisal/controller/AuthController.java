@@ -8,6 +8,7 @@ import com.director_appraisal.director_appraisal.service.JwtService;
 import com.director_appraisal.director_appraisal.service.UserService;
 import com.director_appraisal.director_appraisal.service.RateLimiterService;
 import com.director_appraisal.director_appraisal.service.MfaService;
+import com.director_appraisal.director_appraisal.service.RefreshTokenService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,7 @@ public class AuthController {
     private final UserAdministrativePostRepository userAdministrativePostRepository;
     private final RateLimiterService rateLimiterService;
     private final MfaService mfaService;
+    private final RefreshTokenService refreshTokenService;
     private final com.director_appraisal.director_appraisal.repository.MfaLoginSessionRepository mfaLoginSessionRepository;
     private final jakarta.servlet.http.HttpServletRequest httpServletRequest;
 
@@ -176,9 +178,12 @@ public class AuthController {
         claims.put("administrativePosts", administrativePosts);
 
         String token = jwtService.generateToken(user, claims);
+        com.director_appraisal.director_appraisal.model.RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
         return new LoginResponse(
                 token,
+                refreshToken.getToken(),
+                604800L,
                 user.getEmail(),
                 user.getName(),
                 user.getDesignation(),
@@ -194,6 +199,55 @@ public class AuthController {
                 currentAcademicYear,
                 administrativePosts
         );
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> request) {
+        String requestRefreshToken = request != null ? request.get("refreshToken") : null;
+        if (requestRefreshToken == null || requestRefreshToken.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Refresh token is required."));
+        }
+        try {
+            return refreshTokenService.findByToken(requestRefreshToken)
+                    .map(refreshTokenService::verifyExpiration)
+                    .map(com.director_appraisal.director_appraisal.model.RefreshToken::getUser)
+                    .map(user -> {
+                        String canonicalPost = canonicalAdministrativePost(user.getPost());
+                        String role = user.getRole();
+                        String school = isReviewerRole(role) ? null : user.getSchool();
+                        String currentAcademicYear = academicYearService.getCurrentAcademicYearLabel();
+                        java.util.List<String> administrativePosts = getAdministrativePosts(user);
+
+                        Map<String, Object> claims = new java.util.LinkedHashMap<>();
+                        putClaim(claims, "name", user.getName());
+                        putClaim(claims, "designation", user.getDesignation());
+                        putClaim(claims, "school", school);
+                        putClaim(claims, "role", role);
+                        putClaim(claims, "post", canonicalPost);
+                        putClaim(claims, "currentAcademicYear", currentAcademicYear);
+                        claims.put("administrativePosts", administrativePosts);
+
+                        String newAccessToken = jwtService.generateToken(user, claims);
+                        return ResponseEntity.ok(Map.of(
+                                "token", newAccessToken,
+                                "accessToken", newAccessToken,
+                                "refreshToken", requestRefreshToken,
+                                "tokenType", "Bearer",
+                                "expiresIn", 86400
+                        ));
+                    })
+                    .orElseGet(() -> ResponseEntity.status(401).body(Map.of("message", "Refresh token is invalid or expired. Please login again.")));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("message", safeMessage(e, "Invalid or expired refresh token.")));
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody(required = false) Map<String, String> request) {
+        if (request != null && request.containsKey("refreshToken")) {
+            refreshTokenService.deleteByToken(request.get("refreshToken"));
+        }
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully."));
     }
 
     @PostMapping("/forgot-password")
@@ -290,6 +344,8 @@ public class AuthController {
     @Data
     public static class LoginResponse {
         private final String token;
+        private final String refreshToken;
+        private final Long refreshTokenExpiresIn;
         private final String email;
         private final String name;
         private final String designation;

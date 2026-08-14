@@ -4,7 +4,9 @@ This document describes the authentication and security implementation of the Sc
 
 ## Core Security Technologies
 - **Authentication Engine**: Spring Security 6.x.
-- **Token Mechanism**: JSON Web Token (JWT) using `io.jsonwebtoken` (jjwt) version 0.12.x.
+- **Token Mechanism**: Dual-Token Strategy using JSON Web Tokens (JWT) via `io.jsonwebtoken` (jjwt) version 0.12.x:
+  - **Access Token**: Short/Medium-lived stateless token (24 hours duration).
+  - **Refresh Token**: Long-lived persisted UUID token (7 days duration) stored in PostgreSQL (`refresh_tokens` table).
 - **Hashing Algorithm**: BCrypt (strength 10) for password storage.
 - **Session Policy**: Stateless (`SessionCreationPolicy.STATELESS`).
 
@@ -52,18 +54,32 @@ The system maps authorization checks dynamically using standard user roles.
 
 ---
 
-## 2. JWT Configuration
-Tokens are stateless and hold user profile details inside private claims. 
+## 2. JWT & Refresh Token Configuration
+Tokens are managed using a dual-token model balancing security and session longevity:
 
-### JWT Token Claims Schema:
-- Subject (`sub`): Email address of the user.
-- Issued At (`iat`): Date-time of creation.
-- Expiration (`exp`): 24 hours after creation.
-- Custom Profile Parameters:
+### 2.1 Access Token Schema:
+- **Lifespan**: 24 hours (`86400000` ms / `86400` seconds).
+- **Subject (`sub`)**: Email address of the user.
+- **Issued At (`iat`)**: Date-time of token issue.
+- **Expiration (`exp`)**: 24 hours from issuance.
+- **Custom Claims Payload**:
   - `name`: User's display name.
-  - `designation`: Submitter's title (e.g. Registrar).
+  - `designation`: User's title (e.g. Registrar, Director).
   - `school`: Submitter's school/office.
-  - `role`: Auth role of the profile.
+  - `role`: Authorization role (e.g. `director`, `iqac`).
+  - `post`: Canonical administrative post if applicable.
+  - `currentAcademicYear`: Active academic year label.
+  - `administrativePosts`: List of assigned administrative posts.
+
+### 2.2 Refresh Token Schema:
+- **Lifespan**: 7 days (`604800000` ms / `604800` seconds).
+- **Storage**: Persisted in the `refresh_tokens` database table linked to `user_id`.
+- **Format**: Cryptographically random UUID string (e.g., `a6afec4d-c239-402b-91f2-e065c7b1d742`).
+- **Rotation & Revocation**:
+  - Automatically created on successful login or OTP verification.
+  - Replaces old refresh tokens for the user (enforces single active session per user account).
+  - Explicitly revoked/deleted upon invoking `POST /api/auth/logout`.
+  - Re-issuance via `POST /api/auth/refresh` grants a fresh 24-hour Access Token without requiring user re-authentication.
 
 ---
 

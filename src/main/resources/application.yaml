@@ -66,7 +66,8 @@ app:
     enabled: ${APP_MFA_ENABLED:${MFA_ENABLED:false}}
   jwt:
     secret: ${JWT_SECRET:${JWT_SECRET_KEY:SecretKeyForJWTAppraisalMustBeAtLeast256BitsLongForHMACSHA256}}
-    expiration-ms: 86400000 # 24 hours
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 hours
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000} # 7 days (604,800,000 ms)
   upload:
     local-path: ${LOCAL_STORAGE_DIR:${UPLOAD_LOCAL_PATH:./uploads}}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}

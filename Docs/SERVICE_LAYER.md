@@ -28,6 +28,15 @@ Integrates with Spring Security's `UserDetailsService` and handles user authenti
   5. Formulates a reset URL using the configured `FRONTEND_URL` and sends it to the user's email via `EmailService`.
 - `resetPassword(String rawToken, String newPassword)`: Hashes the raw token from the link, queries the database, verifies that the token is valid, active, and unused, updates the user's password with BCrypt, and flags the reset token as used.
 
+### RefreshTokenService
+Manages the lifecycle of long-lived Refresh Tokens (7 days expiration) stored in PostgreSQL:
+- `createRefreshToken(User user)`: Deletes any existing active refresh token for the user (enforces single active session per user), generates a secure UUID token string, sets expiry to 7 days (`Instant.now().plusMillis(604800000)`), and saves the entity to `refresh_tokens`.
+- `findByToken(String token)`: Searches the repository for a matching refresh token record.
+- `verifyExpiration(RefreshToken token)`: Validates that the refresh token is not revoked and its expiry date has not passed; automatically purges expired tokens from DB and throws an error if expired.
+- `deleteByToken(String token)`: Deletes a refresh token upon explicit user logout.
+- `deleteByUser(User user)`: Revokes all tokens associated with a user profile.
+- `purgeExpiredTokens()`: Periodic cleanup function to purge all expired refresh tokens from the database.
+
 ### EmailService
 Wraps Spring Boot's `JavaMailSender` to send simple transactional text emails.
 

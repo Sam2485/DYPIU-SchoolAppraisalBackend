@@ -58,6 +58,15 @@ Holds tokens generated for password resets.
 - `token_hash` (VARCHAR(255), UNIQUE, NOT NULL): SHA-256 hashed reset token.
 - `used` (BOOLEAN, DEFAULT FALSE, NOT NULL): Status of token consumption.
 - `expires_at` (TIMESTAMP, NOT NULL): Date-time when token expires.
+
+### refresh_tokens
+Persists 7-day long-lived refresh tokens for session renewal.
+- `id` (BIGSERIAL, PRIMARY KEY): Unique identifier.
+- `user_id` (BIGINT, NOT NULL, FOREIGN KEY -> `users(id)` ON DELETE CASCADE): Mapped user account.
+- `token` (VARCHAR(500), UNIQUE, NOT NULL): Cryptographically random UUID token string.
+- `expiry_date` (TIMESTAMP WITH TIME ZONE, NOT NULL): Expiration date-time (7 days from issue).
+- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL): Issue timestamp.
+- `revoked` (BOOLEAN, NOT NULL, DEFAULT FALSE): Revocation flag for logout/invalidation.
 - `created_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP): Creation date-time.
 
 ---
@@ -153,6 +162,12 @@ Migrations are baseline managed inside the directory `src/main/resources/db/migr
 - **V11__add_courses_offered_columns.sql**: Adds `students_admitted` and `attachment` columns to the `courses_offered` table for Section A.
 - **V12__add_staff_training_attachment.sql**: Adds the `attachment` column to the `staff_training` table for Section B.
 - **V15__add_user_schools_column.sql**: Adds the `schools` column to the `users` table to support many-to-many auditor↔school mapping.
+- **V16__add_auditor_assignment_correction_fields.sql**: Adds fields for auditor correction request workflows.
+- **V17__create_mfa_login_sessions.sql**: Adds the `mfa_login_sessions` table for MFA verification flow.
+- **V18__add_sohss_school_support.sql**: Adds support for School of Humanities and Social Sciences (SOHSS).
+- **V19__add_avatar_url_to_users.sql**: Adds `avatar_url` column to `users` table.
+- **V20__add_sdg_address_to_nep_status.sql**: Adds `sdg_address` column to `nep_status` table.
+- **V21__create_refresh_tokens_table.sql**: Creates `refresh_tokens` table for 7-day persistent Refresh Tokens.
 
 ---
 

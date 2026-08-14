@@ -22,6 +22,8 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
   ```json
   {
     "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "a6afec4d-c239-402b-91f2-e065c7b1d742",
+    "refreshTokenExpiresIn": 604800,
     "email": "director@dypiu.ac.in",
     "name": "Director of Schools",
     "designation": "Director",
@@ -34,6 +36,50 @@ This document catalogs all the REST API endpoints exposed by the School Appraisa
     "auditorType": null,
     "auditorRole": null,
     "post": null
+  }
+  ```
+
+### Refresh Access Token
+- **URL**: `/refresh`
+- **Method**: `POST`
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "refreshToken": "a6afec4d-c239-402b-91f2-e065c7b1d742"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "a6afec4d-c239-402b-91f2-e065c7b1d742",
+    "tokenType": "Bearer",
+    "expiresIn": 86400
+  }
+  ```
+- **Response (401 Unauthorized)**:
+  ```json
+  {
+    "message": "Refresh token is invalid or expired. Please login again."
+  }
+  ```
+
+### User Logout
+- **URL**: `/logout`
+- **Method**: `POST`
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "refreshToken": "a6afec4d-c239-402b-91f2-e065c7b1d742"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "message": "Logged out successfully."
   }
   ```
 
