@@ -1,0 +1,575 @@
+====================================================================================================
+           PRACTICAL STEP-BY-STEP MICROSERVICES CONVERSION GUIDE FOR BEGINNERS
+                             School / Director Appraisal Backend
+====================================================================================================
+
+Welcome! This guide is written specifically for you to convert your monolithic Java Spring Boot
+backend (`director-appraisal`) into a production-grade Microservices Architecture step by step.
+
+Even if you have NEVER worked with microservices before, don't worry! This guide will walk you
+through every single folder creation, Maven configuration, database command, code extraction step,
+running command, and testing step in complete detail.
+
+----------------------------------------------------------------------------------------------------
+                                TABLE OF CONTENTS
+----------------------------------------------------------------------------------------------------
+SECTION 1: Core Concepts & What You Are Building (Read This First!)
+SECTION 2: Prerequisites & Tools Setup
+SECTION 3: Overview of the 6 Microservices & Assigned Ports
+SECTION 4: PHASE 1 — Setting Up Multi-Module Maven Project Structure
+SECTION 5: PHASE 2 — Building the API Gateway (`api-gateway` on Port 8080)
+SECTION 6: PHASE 3 — Extracting `auth-user-service` (Port 8081)
+SECTION 7: PHASE 4 — Extracting `storage-service` (Port 8084)
+SECTION 8: PHASE 5 — Extracting `form-data-service` (Port 8082)
+SECTION 9: PHASE 6 — Extracting `submission-service` (Port 8083) & OpenFeign Integration
+SECTION 10: PHASE 7 — Extracting `admin-service` (Port 8085)
+SECTION 11: PHASE 8 — Running Everything & End-to-End Testing
+SECTION 12: Frequently Asked Questions & Troubleshooting
+
+
+====================================================================================================
+SECTION 1: CORE CONCEPTS & WHAT YOU ARE BUILDING (READ THIS FIRST!)
+====================================================================================================
+
+1. WHAT IS A MONOLITH? (Your Current Setup)
+   Right now, all your backend Java code (Auth, Users, Submissions, 64 Audit Tables, File Uploads,
+   and Database Backups) runs inside ONE single Spring Boot application on port 8080.
+   If one part crashes, the whole app stops working.
+
+2. WHAT IS A MICROSERVICES ARCHITECTURE? (What We Are Building)
+   We split the big monolith into small, focused, independent Spring Boot applications called
+   "Microservices". Each microservice has its own folder, its own port, and its own database.
+
+3. WHAT IS AN API GATEWAY?
+   The API Gateway acts as the single "Front Door" for your backend on port 8080.
+   Your React frontend will STILL communicate ONLY with port 8080! You do NOT need to change
+   frontend URLs. The Gateway checks the URL path and routes the request internally:
+     - `/api/auth/**` & `/api/users/**`   --> Sent to Auth Service (Port 8081)
+     - `/api/academic/**`                 --> Sent to Form Data Service (Port 8082)
+     - `/api/submissions/**`              --> Sent to Submission Service (Port 8083)
+     - `/api/attachments/**` & `/uploads` --> Sent to Storage Service (Port 8084)
+     - `/api/backup/**`                   --> Sent to Admin Service (Port 8085)
+
+4. WHAT IS THE STRANGLER FIG PATTERN?
+   We will move services one by one! First, we put the API Gateway in front of the existing monolith.
+   Then we extract Auth, then Storage, then Form Data, then Submissions. At every step, the application
+   remains 100% working!
+
+
+====================================================================================================
+SECTION 2: PREREQUISITES & TOOLS SETUP
+====================================================================================================
+
+Before starting, ensure you have:
+1. Java 17 JDK installed (Verify by running: `java -version`)
+2. Apache Maven installed (Verify by running: `mvn -version` or IntelliJ IDEA Maven)
+3. PostgreSQL installed and running on port 5432 (User: postgres, Password: postgres)
+4. VS Code or IntelliJ IDEA open at `C:\Users\samar\OneDrive\Desktop\Faculty Appraisal Project\DirectorAppraisal\director-appraisal`
+
+
+====================================================================================================
+SECTION 3: OVERVIEW OF THE 6 MICROSERVICES & ASSIGNED PORTS
+====================================================================================================
+
++-----------------------+-------+--------------------------+-----------------------------------+
+| Service Name          | Port  | Owned Database Name      | Primary Purpose                   |
++-----------------------+-------+--------------------------+-----------------------------------+
+| `api-gateway`         | 8080  | None                     | Entry Point, Routing, JWT Check   |
+| `auth-user-service`   | 8081  | `appraisal_auth_db`      | Login, MFA, JWT, Refresh Token    |
+| `form-data-service`   | 8082  | `appraisal_forms_db`     | 64 Academic & Admin Form Tables   |
+| `submission-service`  | 8083  | `appraisal_submission_db`| Drafts, Approvals, Versions, Cycles|
+| `storage-service`     | 8084  | Disk (`./uploads`)       | PDF/Image Uploads & Downloads     |
+| `admin-service`       | 8085  | Indirect DB Dump         | Database Backups & Restore Jobs   |
++-----------------------+-------+--------------------------+-----------------------------------+
+
+
+====================================================================================================
+SECTION 4: PHASE 1 — SETTING UP MULTI-MODULE MAVEN PROJECT STRUCTURE
+====================================================================================================
+
+In this phase, we transform your project directory into a Maven Multi-Module workspace.
+
+STEP 1.1: Create Databases in PostgreSQL
+Open your PostgreSQL terminal (psql or pgAdmin) and run these SQL statements:
+
+  CREATE DATABASE appraisal_auth_db;
+  CREATE DATABASE appraisal_forms_db;
+  CREATE DATABASE appraisal_submission_db;
+
+STEP 1.2: Backup Existing Code
+Before making changes, make a backup copy of your project folder:
+Copy `director-appraisal` to `director-appraisal-monolith-backup`.
+
+STEP 1.3: Update Root `pom.xml`
+Open `director-appraisal/pom.xml` and change `<packaging>` to `pom`, adding `<modules>`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.director-appraisal</groupId>
+    <artifactId>director-appraisal-parent</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>director-appraisal-parent</name>
+
+    <modules>
+        <module>api-gateway</module>
+        <module>auth-user-service</module>
+        <module>form-data-service</module>
+        <module>submission-service</module>
+        <module>storage-service</module>
+        <module>admin-service</module>
+    </modules>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+    </parent>
+
+    <properties>
+        <java.version>17</java.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <jjwt.version>0.12.5</jjwt.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>
+```
+
+
+====================================================================================================
+SECTION 5: PHASE 2 — BUILDING THE API GATEWAY (`api-gateway` on Port 8080)
+====================================================================================================
+
+The API Gateway is the central router. It receives all HTTP requests from the React frontend on
+port 8080 and forwards them to the appropriate microservice.
+
+STEP 2.1: Create Directory Structure for `api-gateway`
+In PowerShell or Terminal at `director-appraisal/`:
+  mkdir api-gateway
+  mkdir api-gateway/src/main/java/com/director_appraisal/gateway
+  mkdir api-gateway/src/main/resources
+
+STEP 2.2: Create `api-gateway/pom.xml`
+Create file `api-gateway/pom.xml` with content:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.director-appraisal</groupId>
+        <artifactId>director-appraisal-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>api-gateway</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+STEP 2.3: Create `api-gateway/src/main/resources/application.yaml`
+Create file with routing configuration:
+
+```yaml
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+              - PATCH
+            allowedHeaders: "*"
+            exposedHeaders:
+              - Authorization
+              - Content-Type
+            allowCredentials: true
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/**, /api/users/**
+
+        - id: form-data-service
+          uri: ${FORMS_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/academic/**, /api/administrative/**
+
+        - id: submission-service
+          uri: ${SUBMISSION_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/submissions/**, /api/audit-cycles/**
+
+        - id: storage-service
+          uri: ${STORAGE_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/attachments/**, /uploads/**
+
+        - id: admin-service
+          uri: ${ADMIN_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/backup/**
+```
+
+STEP 2.4: Create Main Class `ApiGatewayApplication.java`
+Create file `api-gateway/src/main/java/com/director_appraisal/gateway/ApiGatewayApplication.java`:
+
+```java
+package com.director_appraisal.gateway;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ApiGatewayApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ApiGatewayApplication.class, args);
+    }
+}
+```
+
+
+====================================================================================================
+SECTION 6: PHASE 3 — EXTRACTING `auth-user-service` (PORT 8081)
+====================================================================================================
+
+This microservice handles user authentication, JWT access tokens, 7-day refresh tokens, MFA OTP,
+and user management.
+
+STEP 3.1: Create Directory Structure for `auth-user-service`
+  mkdir auth-user-service
+  mkdir auth-user-service/src/main/java/com/director_appraisal/auth
+  mkdir auth-user-service/src/main/resources/db/migration
+
+STEP 3.2: Copy Source Code from Monolith into `auth-user-service`
+Copy these packages from `src/main/java/com/director_appraisal/director_appraisal/`:
+  - `controller/AuthController.java` & `controller/UserController.java`
+  - `model/User.java`, `UserAdministrativePost.java`, `RefreshToken.java`, `MfaLoginSession.java`, `PasswordResetToken.java`
+  - `repository/UserRepository.java`, `UserAdministrativePostRepository.java`, `RefreshTokenRepository.java`, `MfaLoginSessionRepository.java`, `PasswordResetTokenRepository.java`
+  - `service/UserService.java`, `JwtService.java`, `RefreshTokenService.java`, `MfaService.java`, `RateLimiterService.java`, `EmailService.java`
+  - `config/SecurityConfig.java`, `JwtRequestFilter.java`
+
+STEP 3.3: Copy Flyway Migrations for Auth
+Copy migrations V1, V2, V15, V17, V19, V21 into `auth-user-service/src/main/resources/db/migration/`:
+  - `V1__init_auth_schema.sql` (Only `users` & `user_administrative_posts` tables)
+  - `V2__create_mfa_sessions.sql` (`mfa_login_sessions` & `password_reset_tokens`)
+  - `V3__add_avatar_url.sql` (`alter table users add avatar_url`)
+  - `V4__create_refresh_tokens_table.sql` (`refresh_tokens`)
+
+STEP 3.4: Configure `application.yaml` for `auth-user-service`
+Create `auth-user-service/src/main/resources/application.yaml`:
+
+```yaml
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-user-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/appraisal_auth_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:SecretKeyForJWTAppraisalMustBeAtLeast256BitsLongForHMACSHA256}
+    expiration-ms: 86400000        # 24 hours
+    refresh-expiration-ms: 604800000 # 7 days
+```
+
+
+====================================================================================================
+SECTION 7: PHASE 4 — EXTRACTING `storage-service` (PORT 8084)
+====================================================================================================
+
+This microservice handles local file uploads, attachments, and PDF/image downloads.
+
+STEP 4.1: Create Directory Structure for `storage-service`
+  mkdir storage-service
+  mkdir storage-service/src/main/java/com/director_appraisal/storage
+  mkdir storage-service/src/main/resources
+
+STEP 4.2: Copy Code
+Copy:
+  - `controller/AttachmentController.java`
+  - `service/AttachmentService.java`, `StorageService.java`, `LocalFileStorageService.java`
+
+STEP 4.3: Configure `application.yaml` for `storage-service`
+Create `storage-service/src/main/resources/application.yaml`:
+
+```yaml
+server:
+  port: 8084
+
+spring:
+  application:
+    name: storage-service
+
+app:
+  upload:
+    local-path: ${LOCAL_STORAGE_DIR:./uploads}
+```
+
+
+====================================================================================================
+SECTION 8: PHASE 5 — EXTRACTING `form-data-service` (PORT 8082)
+====================================================================================================
+
+This microservice owns all 64 relational section tables for Academic (39) and Administrative (25) forms.
+
+STEP 5.1: Create Directory Structure for `form-data-service`
+  mkdir form-data-service
+  mkdir form-data-service/src/main/java/com/director_appraisal/forms
+  mkdir form-data-service/src/main/resources/db/migration
+
+STEP 5.2: Copy Code
+Copy:
+  - All files in `controller/academic/*` and `controller/administrative/*`
+  - All files in `model/academic/*` and `model/administrative/*`
+  - All files in `repository/academic/*` and `repository/administrative/*`
+  - All files in `service/academic/*` and `service/administrative/*`
+
+STEP 5.3: Configure Database & Flyway for `form-data-service`
+Create `form-data-service/src/main/resources/application.yaml`:
+
+```yaml
+server:
+  port: 8082
+
+spring:
+  application:
+    name: form-data-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/appraisal_forms_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+```
+
+
+====================================================================================================
+SECTION 9: PHASE 6 — EXTRACTING `submission-service` (PORT 8083) & OPENFEIGN
+====================================================================================================
+
+This microservice handles the appraisal submission lifecycle, draft saving, versions, auditor
+assignments, and status reviews.
+
+STEP 6.1: Create Directory Structure for `submission-service`
+  mkdir submission-service
+  mkdir submission-service/src/main/java/com/director_appraisal/submission
+  mkdir submission-service/src/main/resources/db/migration
+
+STEP 6.2: Copy Code
+Copy:
+  - `controller/SubmissionController.java`, `AuditCycleController.java`
+  - `model/Submission.java`, `SubmissionAuditorAssignment.java`, `SubmissionReportVersion.java`, `Snapshot.java`, `AcademicYear.java`
+  - `repository/SubmissionRepository.java`, `SubmissionAuditorAssignmentRepository.java`, `SnapshotRepository.java`, `AcademicYearRepository.java`
+  - `service/SubmissionService.java`, `AcademicYearService.java`, `TableDataPromotionService.java`
+
+STEP 6.3: Add OpenFeign Dependency to `submission-service/pom.xml`
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-openfeign</artifactId>
+</dependency>
+```
+
+STEP 6.4: Create OpenFeign Client `AuthClient.java`
+Because `submission-service` is in a separate application from `auth-user-service`, it cannot directly call `UserRepository` via Java injection. Instead, it makes an HTTP call via OpenFeign:
+
+Create `submission-service/src/main/java/com/director_appraisal/submission/client/AuthClient.java`:
+
+```java
+package com.director_appraisal.submission.client;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import java.util.Map;
+
+@FeignClient(name = "auth-user-service", url = "${AUTH_SERVICE_URL:http://localhost:8081}")
+public interface AuthClient {
+
+    @GetMapping("/api/users/by-email/{email}")
+    Map<String, Object> getUserByEmail(@PathVariable("email") String email);
+
+    @GetMapping("/api/users/{id}")
+    Map<String, Object> getUserById(@PathVariable("id") Long id);
+}
+```
+
+STEP 6.5: Configure `application.yaml` for `submission-service`
+Create `submission-service/src/main/resources/application.yaml`:
+
+```yaml
+server:
+  port: 8083
+
+spring:
+  application:
+    name: submission-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/appraisal_submission_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+AUTH_SERVICE_URL: http://localhost:8081
+FORMS_SERVICE_URL: http://localhost:8082
+```
+
+
+====================================================================================================
+SECTION 10: PHASE 7 — EXTRACTING `admin-service` (PORT 8085)
+====================================================================================================
+
+This service performs system backups and database dumps.
+
+STEP 7.1: Create Directory Structure for `admin-service`
+  mkdir admin-service
+  mkdir admin-service/src/main/java/com/director_appraisal/admin
+  mkdir admin-service/src/main/resources
+
+STEP 7.2: Copy Code
+Copy:
+  - `controller/BackupController.java`
+  - `service/BackupService.java`
+
+STEP 7.3: Configure `application.yaml` for `admin-service`
+Create `admin-service/src/main/resources/application.yaml`:
+
+```yaml
+server:
+  port: 8085
+
+spring:
+  application:
+    name: admin-service
+```
+
+
+====================================================================================================
+SECTION 11: PHASE 8 — RUNNING EVERYTHING & END-TO-END TESTING
+====================================================================================================
+
+STEP 8.1: Compile All Microservices
+From root directory `director-appraisal/`:
+  mvn clean package -DskipTests
+
+STEP 8.2: Start All Microservices
+Open 6 terminal windows or run them in background:
+
+  Terminal 1: java -jar auth-user-service/target/auth-user-service-0.0.1-SNAPSHOT.jar
+  Terminal 2: java -jar form-data-service/target/form-data-service-0.0.1-SNAPSHOT.jar
+  Terminal 3: java -jar submission-service/target/submission-service-0.0.1-SNAPSHOT.jar
+  Terminal 4: java -jar storage-service/target/storage-service-0.0.1-SNAPSHOT.jar
+  Terminal 5: java -jar admin-service/target/admin-service-0.0.1-SNAPSHOT.jar
+  Terminal 6: java -jar api-gateway/target/api-gateway-0.0.1-SNAPSHOT.jar
+
+STEP 8.3: Verify End-to-End Functionality
+1. Open your browser or Postman.
+2. Send a `POST http://localhost:8080/api/auth/login` request.
+   --> Sent to API Gateway (8080), routed to Auth Service (8081).
+   --> Receives 24-hour Access Token & 7-day Refresh Token!
+3. Send `GET http://localhost:8080/api/submissions/my` with Authorization Bearer header.
+   --> Sent to API Gateway (8080), routed to Submission Service (8083).
+4. Upload an avatar image via `POST http://localhost:8080/api/users/me/avatar`.
+   --> Sent to API Gateway (8080), routed to Auth Service (8081) & Storage Service (8084).
+
+
+====================================================================================================
+SECTION 12: FREQUENTLY ASKED QUESTIONS & TROUBLESHOOTING
+====================================================================================================
+
+Q1: Do I need to change anything in the React Frontend?
+A1: NO! The React frontend still sends all HTTP requests to `http://localhost:8080`.
+    The API Gateway transparently routes requests to the 5 backend microservices!
+
+Q2: What happens if `auth-user-service` is down?
+A2: Only login and user management endpoints will fail. Users who are already logged in can
+    continue viewing submissions because JWT validation is stateless at the Gateway!
+
+Q3: How do microservices talk to each other?
+A3: Using Spring Cloud OpenFeign! `submission-service` calls `@FeignClient` interfaces to fetch
+    user details from `auth-user-service` over HTTP REST.
+
+Q4: What if I get a `Connection Refused` error?
+A4: Ensure PostgreSQL is running on port 5432 and that all 3 databases (`appraisal_auth_db`,
+    `appraisal_forms_db`, `appraisal_submission_db`) exist before launching the services.
+
+====================================================================================================
+CONGRATULATIONS! You now have a complete, production-grade Microservices Architecture blueprint!
+====================================================================================================
